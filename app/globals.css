@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
+/* Базовые цвета и переменные */
 :root {
-  /* Цвета в стиле Next.js документации */
+  /* Светлая тема в стиле Next.js */
   --background: #ffffff;
   --foreground: #171717;
   --primary: #171717;
@@ -13,29 +14,13 @@
   --accent: #f5f5f5;
   --accent-foreground: #171717;
   --border: #e5e5e5;
+  --input: #e5e5e5;
   --ring: #171717;
   --radius: 0.5rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-border: var(--border);
-  --color-ring: var(--ring);
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
-}
-
 .dark {
+  /* Темная тема в стиле Next.js */
   --background: #0a0a0a;
   --foreground: #ededed;
   --primary: #ededed;
@@ -47,21 +32,246 @@
   --accent: #262626;
   --accent-foreground: #ededed;
   --border: #262626;
+  --input: #262626;
   --ring: #d4d4d4;
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-feature-settings: "rlig" 1, "calt" 1;
+/* Для Tailwind 4 нужно задать цвета через theme */
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
 }
 
-/* Убираем ошибочные классы */
-/* 
-  Вместо этого используем Tailwind классы напрямую:
-  border-border -> border-gray-200 или border-input
-  * { @apply border-border } -> удалить эту строку
-*/
+/* Остальные стили */
+/* Добавить в globals.css */
+/* Добавить в globals.css */
+@layer base {
+  .grid-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    overflow: hidden;
+    opacity: 0.3;
+  }
+  
+  .grid-pattern {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+      linear-gradient(rgba(120, 119, 198, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120, 119, 198, 0.1) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: gridMove 40s linear infinite;
+  }
+  
+  .floating-dots {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  
+  .dot {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: var(--primary);
+    border-radius: 50%;
+    opacity: 0.1;
+    animation: float 20s infinite linear;
+  }
+  
+  .dot:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
+  .dot:nth-child(2) { top: 20%; left: 80%; animation-delay: 2s; }
+  .dot:nth-child(3) { top: 40%; left: 30%; animation-delay: 4s; }
+  .dot:nth-child(4) { top: 60%; left: 60%; animation-delay: 6s; }
+  .dot:nth-child(5) { top: 80%; left: 20%; animation-delay: 8s; }
+  .dot:nth-child(6) { top: 30%; left: 70%; animation-delay: 10s; }
+  .dot:nth-child(7) { top: 70%; left: 40%; animation-delay: 12s; }
+  .dot:nth-child(8) { top: 90%; left: 90%; animation-delay: 14s; }
+  
+  @keyframes gridMove {
+    0% {
+      transform: translate(0, 0);
+    }
+    100% {
+      transform: translate(50px, 50px);
+    }
+  }
+  
+  @keyframes float {
+    0%, 100% {
+      transform: translate(0, 0);
+    }
+    25% {
+      transform: translate(20px, -20px);
+    }
+    50% {
+      transform: translate(-20px, 20px);
+    }
+    75% {
+      transform: translate(20px, 20px);
+    }
+  }
+
+  .bg-grid {
+    background-image: 
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: gridMove 40s linear infinite;
+  }
+  
+  @keyframes gridMove {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 50px 50px;
+    }
+  }
+  
+  /* Плавное плавание для градиентов */
+  .animate-float-slow {
+    animation: floatSlow 30s ease-in-out infinite;
+  }
+  
+  @keyframes floatSlow {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    25% {
+      transform: translate(-30px, -20px) scale(1.05);
+    }
+    50% {
+      transform: translate(20px, 30px) scale(0.95);
+    }
+    75% {
+      transform: translate(-20px, 20px) scale(1.02);
+    }
+  }
+  
+  /* Мерцание для точек */
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.3;
+      transform: scale(1.2);
+    }
+  }
+  
+  /* Линии подключения */
+  .bg-connection-lines {
+    background-image: 
+      linear-gradient(90deg, transparent 49%, var(--border) 50%, transparent 51%),
+      linear-gradient(0deg, transparent 49%, var(--border) 50%, transparent 51%);
+    background-size: 100px 100px;
+    animation: linesMove 60s linear infinite;
+  }
+  
+  @keyframes linesMove {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 100px 100px;
+    }
+  }
+  .bg-grid-circuit {
+    background-image: 
+      linear-gradient(to right, rgba(120, 119, 198, 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(120, 119, 198, 0.1) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: circuitGridMove 40s linear infinite;
+  }
+  
+  @keyframes circuitGridMove {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 60px 60px;
+    }
+  }
+  
+  /* Медленное мерцание для точек */
+  @keyframes ping-slow {
+    0% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+    70% {
+      transform: scale(1.2);
+      opacity: 0.3;
+    }
+    100% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+  }
+  
+  .animate-ping-slow {
+    animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  
+  /* Эффект передачи данных */
+  .data-pulse {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .data-pulse::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(66, 153, 225, 0.4),
+      rgba(120, 119, 198, 0.4),
+      rgba(66, 153, 225, 0.4),
+      transparent
+    );
+    animation: dataTransfer 3s linear infinite;
+  }
+  
+  @keyframes dataTransfer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
 
 /* Стилизация скроллбара */
 ::-webkit-scrollbar {
@@ -96,67 +306,218 @@ body {
 
 /* Кастомные утилиты */
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  /* Плавные переходы */
+  .transition-smooth {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
-
-  .line-clamp-1 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
+  
+  .transition-colors-smooth {
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   }
-
-  .line-clamp-2 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+  
+  .transition-transform-smooth {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
-
-  .line-clamp-3 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
+  
+  /* Анимации при hover/focus */
+  .hover-lift:hover {
+    transform: translateY(-2px);
   }
-
-  .glass {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+  
+  .hover-scale:hover {
+    transform: scale(1.05);
   }
-
-  .animate-in {
-    animation-duration: 0.2s;
-    animation-timing-function: ease-out;
-    animation-fill-mode: both;
+  
+  .active-scale:active {
+    transform: scale(0.98);
   }
-
+  
+  /* Эффекты для иконок (без прыжков) */
+  .icon-hover:hover {
+    transform: scale(1.1);
+  }
+  
+  .icon-focus:focus-within svg {
+    transform: scale(1.1);
+  }
+  
+  /* Анимации появления (один раз) */
   .fade-in {
-    animation-name: fadeIn;
+    opacity: 0;
+    animation: fadeIn 0.6s ease-out forwards;
   }
-
-  .slide-in-from-top {
-    animation-name: slideInFromTop;
+  
+  .fade-in-up {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.6s ease-out forwards;
   }
-
+  
+  .fade-in-down {
+    opacity: 0;
+    transform: translateY(-20px);
+    animation: fadeInDown 0.6s ease-out forwards;
+  }
+  
+  .scale-in {
+    opacity: 0;
+    transform: scale(0.95);
+    animation: scaleIn 0.5s ease-out forwards;
+  }
+  
+  /* Keyframes для анимаций появления */
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
     to {
       opacity: 1;
     }
   }
-
-  @keyframes slideInFromTop {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
+  
+  @keyframes fadeInUp {
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+  
+  @keyframes fadeInDown {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes scaleIn {
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  /* Задержки для stagger эффекта */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+  
+  /* Для последовательного появления элементов */
+  .stagger > * {
+    opacity: 0;
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+  
+  .stagger > *:nth-child(1) { animation-delay: 100ms; }
+  .stagger > *:nth-child(2) { animation-delay: 200ms; }
+  .stagger > *:nth-child(3) { animation-delay: 300ms; }
+  .stagger > *:nth-child(4) { animation-delay: 400ms; }
+  .stagger > *:nth-child(5) { animation-delay: 500ms; }
+  .stagger > *:nth-child(6) { animation-delay: 600ms; }
+  
+  /* Стили для инпутов и селектов */
+  .input-focus:focus-within {
+    box-shadow: 0 0 0 2px var(--ring);
+  }
+  
+  .input-underline {
+    position: relative;
+  }
+  
+  .input-underline::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background-color: var(--primary);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 0.3s ease-out;
+  }
+  
+  .input-underline:focus-within::after {
+    transform: scaleX(1);
+  }
+  
+  /* Для кнопок - эффект при наведении */
+  .btn-hover-effect {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn-hover-effect::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: transform 0.6s ease-out;
+  }
+  
+  .btn-hover-effect:hover::after {
+    transform: translateX(100%);
+  }
+  
+  /* Для карточек */
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Для ссылок - подчеркивание при наведении */
+  .link-underline {
+    position: relative;
+  }
+  
+  .link-underline::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 1px;
+    background-color: var(--primary);
+    transition: width 0.3s ease-out;
+  }
+  
+  .link-underline:hover::after {
+    width: 100%;
+  }
+  
+  /* Анимация счетчика (один раз) */
+  .count-animation {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: fadeInUp 0.8s ease-out 0.3s forwards;
+  }
+  
+  /* Анимация для badge */
+  .badge-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+  
+  /* Анимация вращения для иконки загрузки */
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
     }
   }
 }
