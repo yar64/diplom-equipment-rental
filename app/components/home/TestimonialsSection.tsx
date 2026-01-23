@@ -1,7 +1,6 @@
 // app/components/home/TestimonialsSection.tsx
 import TestimonialCard from '../ui/TestimonialCard';
 
-// Локальная константа testimonials
 const testimonials = [
   {
     name: 'Александр Петров',
@@ -28,21 +27,21 @@ const testimonials = [
 
 export default function TestimonialsSection() {
   return (
-    <section className="py-20 bg-secondary">
+    <section className="py-12 md:py-16 lg:py-20 bg-secondary w-full">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 bg-accent px-4 py-2 rounded-full mb-4 border border-border">
-            <span className="text-sm font-medium text-muted-foreground">Мнения клиентов</span>
+        <div className="text-center mb-8 md:mb-12 lg:mb-16 px-4">
+          <div className="inline-flex items-center gap-2 bg-accent px-3 py-1.5 md:px-4 md:py-2 rounded-full mb-3 md:mb-4 border border-border">
+            <span className="text-xs md:text-sm font-medium text-muted-foreground">Мнения клиентов</span>
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-3 md:mb-4">
             Говорят наши <span className="text-primary">клиенты</span>
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">
             Реальные отзывы от организаторов крупнейших мероприятий
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
           {testimonials.map((testimonial, index) => (
             <TestimonialCard key={index} testimonial={testimonial} />
           ))}

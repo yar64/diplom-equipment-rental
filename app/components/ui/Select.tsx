@@ -1,3 +1,4 @@
+// app/components/ui/Select.tsx
 'use client';
 
 import { ChevronDown } from 'lucide-react';
@@ -17,6 +18,7 @@ interface SelectProps {
   label?: string;
   error?: string;
   icon?: React.ReactNode;
+  selectSize?: 'sm' | 'default' | 'lg';
 }
 
 export default function Select({
@@ -28,8 +30,21 @@ export default function Select({
   disabled = false,
   label,
   error,
-  icon
+  icon,
+  selectSize = 'default'
 }: SelectProps) {
+  const sizeClasses = {
+    sm: "py-2 px-3 text-sm",
+    default: "py-2.5 px-4 text-base",
+    lg: "py-3 px-4 text-lg"
+  };
+
+  const iconSizeClasses = {
+    sm: "left-3",
+    default: "left-3 sm:left-4",
+    lg: "left-4"
+  };
+  
   return (
     <div className={`w-full input-underline ${className}`}>
       {label && (
@@ -40,7 +55,11 @@ export default function Select({
       
       <div className="relative">
         {icon && (
-          <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none transition-colors-smooth icon-focus">
+          <div className={`
+            absolute top-1/2 transform -translate-y-1/2 text-muted-foreground 
+            pointer-events-none transition-colors-smooth icon-focus
+            ${iconSizeClasses[selectSize]}
+          `}>
             {icon}
           </div>
         )}
@@ -50,11 +69,12 @@ export default function Select({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           className={`
-            w-full appearance-none bg-background border border-input rounded-lg py-3 px-4 text-foreground
+            w-full appearance-none bg-background border border-input rounded-lg text-foreground
             focus:outline-none transition-smooth
             disabled:cursor-not-allowed disabled:opacity-50
             hover:border-muted-foreground/50
-            ${icon ? 'pl-10 pr-10' : 'pr-10'}
+            ${sizeClasses[selectSize]}
+            ${icon ? `pl-8 sm:pl-10 pr-10` : 'pr-10'}
             ${error ? 'border-destructive focus:border-destructive focus:ring-destructive/20' : ''}
           `}
         >

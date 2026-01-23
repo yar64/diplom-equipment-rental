@@ -9,6 +9,7 @@ interface ProfileAvatarProps {
   size?: 'sm' | 'md' | 'lg';
   editable?: boolean;
   onEdit?: () => void;
+  compact?: boolean;
 }
 
 export default function ProfileAvatar({ 
@@ -16,18 +17,28 @@ export default function ProfileAvatar({
   role, 
   size = 'md',
   editable = false,
-  onEdit 
+  onEdit,
+  compact = false
 }: ProfileAvatarProps) {
   const sizeClasses = {
-    sm: 'w-12 h-12',
-    md: 'w-16 h-16',
-    lg: 'w-24 h-24'
+    sm: 'w-10 h-10 sm:w-12 sm:h-12',
+    md: 'w-12 h-12 sm:w-16 sm:h-16',
+    lg: 'w-16 h-16 sm:w-24 sm:h-24'
+  };
+
+  const iconSizeClasses = {
+    sm: 'w-4 h-4 sm:w-6 sm:h-6',
+    md: 'w-6 h-6 sm:w-8 sm:h-8',
+    lg: 'w-8 h-8 sm:w-12 sm:h-12'
   };
 
   return (
-    <div className="flex items-center gap-4">
-      <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center relative group`}>
-        <User className={`${size === 'lg' ? 'w-12 h-12' : 'w-8 h-8'} text-primary`} />
+    <div className={`flex items-center gap-3 ${compact ? 'sm:gap-4' : 'gap-4'}`}>
+      <div className={`
+        ${sizeClasses[size]} rounded-full bg-gradient-to-br from-primary/20 to-primary/5 
+        flex items-center justify-center relative group
+      `}>
+        <User className={`${iconSizeClasses[size]} text-primary`} />
         
         {editable && (
           <button 
@@ -40,9 +51,19 @@ export default function ProfileAvatar({
       </div>
       
       <div>
-        <h3 className="font-bold text-lg">{name}</h3>
+        <h3 className={`
+          font-bold text-foreground
+          ${compact ? 'text-base sm:text-lg' : 'text-lg sm:text-xl'}
+        `}>
+          {name}
+        </h3>
         {role && (
-          <p className="text-sm text-muted-foreground">{role}</p>
+          <p className={`
+            text-muted-foreground
+            ${compact ? 'text-xs sm:text-sm' : 'text-sm'}
+          `}>
+            {role}
+          </p>
         )}
       </div>
     </div>

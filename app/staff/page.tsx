@@ -1,7 +1,7 @@
 // app/team/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Button from '../components/ui/Button';
 import { 
   Users,
@@ -18,15 +18,11 @@ import {
   Truck,
   User,
   Sparkles,
-  Shield,
-  Zap,
-  Heart,
-  Target,
-  Award,
-  Clock,
-  CheckCircle,
   MapPin,
-  Globe
+  CheckCircle,
+  Award,
+  Target,
+  X
 } from 'lucide-react';
 
 interface TeamMember {
@@ -39,7 +35,6 @@ interface TeamMember {
   bio: string;
   phone: string;
   email: string;
-  icon: any;
   rating: number;
   isAvailable: boolean;
   projectsCount: number;
@@ -50,6 +45,7 @@ interface TeamMember {
 export default function TeamPage() {
   const [activeDepartment, setActiveDepartment] = useState<string>('all');
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
   // Сотрудники
   const teamMembers: TeamMember[] = [
@@ -63,7 +59,6 @@ export default function TeamPage() {
       bio: 'Более 150 реализованных проектов, включая международные фестивали и корпоративные мероприятия мирового уровня. Эксперт по комплексным техническим решениям.',
       phone: '+7 (916) 123-45-67',
       email: 'a.ivanov@equipment-rental.ru',
-      icon: Settings,
       rating: 4.9,
       isAvailable: true,
       projectsCount: 156,
@@ -80,7 +75,6 @@ export default function TeamPage() {
       bio: 'Специализируется на подборе оборудования для бизнес-мероприятий любого масштаба. Помогла более 100 компаниям провести успешные мероприятия.',
       phone: '+7 (916) 234-56-78',
       email: 'e.petrova@equipment-rental.ru',
-      icon: User,
       rating: 4.8,
       isAvailable: true,
       projectsCount: 89,
@@ -97,7 +91,6 @@ export default function TeamPage() {
       bio: 'Работал на крупнейших музыкальных фестивалях страны. Специалист по премиальному аудиооборудованию ведущих мировых брендов.',
       phone: '+7 (916) 345-67-89',
       email: 'd.smirnov@equipment-rental.ru',
-      icon: Headphones,
       rating: 5.0,
       isAvailable: false,
       projectsCount: 203,
@@ -114,7 +107,6 @@ export default function TeamPage() {
       bio: 'Создавала световые решения для fashion-показов и театральных постановок. Разработала концепции освещения для более 100 мероприятий.',
       phone: '+7 (916) 456-78-90',
       email: 'o.kozlova@equipment-rental.ru',
-      icon: Lightbulb,
       rating: 4.7,
       isAvailable: true,
       projectsCount: 112,
@@ -131,7 +123,6 @@ export default function TeamPage() {
       bio: 'Организовал доставку оборудования для мероприятий в 12 городах России. Разработал систему оптимизации логистических процессов.',
       phone: '+7 (916) 567-89-01',
       email: 'm.volkov@equipment-rental.ru',
-      icon: Truck,
       rating: 4.9,
       isAvailable: true,
       projectsCount: 345,
@@ -144,11 +135,10 @@ export default function TeamPage() {
       position: 'Ведущий видеоинженер',
       department: 'technical',
       experience: '11 лет в видеоиндустрии',
-      expertise: ['Видеопроекция', 'LED экраны', 'Стриминг мероприятий', 'VR/AR технологии'],
+      expertise: ['Видеопроекция', 'LED экраны', 'Стриминг мероприятий'],
       bio: 'Технический директор по видео на международных конференциях. Специализируется на современных видео технологиях и инновационных решениях.',
       phone: '+7 (916) 789-01-23',
       email: 's.nikolaev@equipment-rental.ru',
-      icon: Video,
       rating: 4.9,
       isAvailable: true,
       projectsCount: 134,
@@ -166,53 +156,101 @@ export default function TeamPage() {
     { id: 'logistics', name: 'Логистика', icon: Truck, count: 1 },
   ];
 
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const filteredMembers = activeDepartment === 'all' 
     ? teamMembers 
     : teamMembers.filter(member => member.department === activeDepartment);
 
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Герой секция */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-grid opacity-5"></div>
-        <div className="container mx-auto px-4 py-16 relative">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-muted rounded-full mb-6">
-              <Sparkles className="w-4 h-4" />
-              <span className="text-sm font-medium">Команда экспертов</span>
-            </div>
-            
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">
-              Наши специалисты по оборудованию
-            </h1>
-            
-            <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Профессионалы с многолетним опытом в аренде оборудования для мероприятий любого масштаба
-            </p>
+  const getDepartmentIcon = (dept: string) => {
+    const deptData = departments.find(d => d.id === dept);
+    return deptData ? deptData.icon : Users;
+  };
+
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+        <div className="container mx-auto px-4 py-8">
+          {/* Скелетон заголовка */}
+          <div className="text-center mb-12">
+            <div className="h-6 bg-gray-200 dark:bg-gray-800 rounded w-48 mx-auto mb-4"></div>
+            <div className="h-12 bg-gray-200 dark:bg-gray-800 rounded w-3/4 mx-auto mb-4"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-2/3 mx-auto"></div>
+          </div>
+
+          {/* Скелетон фильтров */}
+          <div className="flex flex-wrap gap-2 mb-8">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="h-12 bg-gray-200 dark:bg-gray-800 rounded w-32"></div>
+            ))}
+          </div>
+
+          {/* Скелетон карточек */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="bg-white dark:bg-gray-900 rounded-xl p-6 animate-pulse">
+                <div className="flex justify-between mb-4">
+                  <div className="w-14 h-14 bg-gray-300 dark:bg-gray-800 rounded-xl"></div>
+                  <div className="w-20 h-8 bg-gray-300 dark:bg-gray-800 rounded"></div>
+                </div>
+                <div className="h-6 bg-gray-300 dark:bg-gray-800 rounded w-3/4 mb-2"></div>
+                <div className="h-4 bg-gray-300 dark:bg-gray-800 rounded w-1/2 mb-4"></div>
+                <div className="space-y-2 mb-4">
+                  {[1, 2].map(j => (
+                    <div key={j} className="h-3 bg-gray-300 dark:bg-gray-800 rounded"></div>
+                  ))}
+                </div>
+                <div className="h-8 bg-gray-300 dark:bg-gray-800 rounded"></div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
+    );
+  }
 
-      <div className="container mx-auto px-4 pb-20">
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Герой секция */}
+      <div className="container mx-auto px-4 py-8 md:py-12">
+        <div className="max-w-4xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 md:mb-6">
+            <Sparkles className="w-4 h-4" />
+            <span className="text-sm font-medium">Команда экспертов</span>
+          </div>
+          
+          <h1 className="text-3xl md:text-4xl font-bold mb-4 md:mb-6 text-gray-900 dark:text-gray-100">
+            Наши специалисты по оборудованию
+          </h1>
+          
+          <p className="text-base md:text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+            Профессионалы с многолетним опытом в аренде оборудования для мероприятий любого масштаба
+          </p>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 pb-8 md:pb-12">
         {/* Фильтры */}
-        <div className="max-w-6xl mx-auto mb-12">
-          <div className="flex flex-wrap gap-2">
+        <div className="max-w-6xl mx-auto mb-8 md:mb-12">
+          <div className="flex flex-wrap gap-2 md:gap-3">
             {departments.map((dept) => (
               <button
                 key={dept.id}
                 onClick={() => setActiveDepartment(dept.id)}
-                className={`inline-flex items-center gap-2 px-4 py-3 rounded-lg border transition-colors-smooth ${
+                className={`inline-flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 rounded-lg border transition-colors ${
                   activeDepartment === dept.id
-                    ? 'bg-primary text-primary-foreground border-primary' 
-                    : 'bg-card hover:bg-accent border-border'
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100'
                 }`}
               >
                 <dept.icon className="w-4 h-4" />
-                <span className="font-medium">{dept.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                <span className="font-medium text-sm md:text-base">{dept.name}</span>
+                <span className={`text-xs px-1.5 md:px-2 py-0.5 rounded-full ${
                   activeDepartment === dept.id
-                    ? 'bg-primary-foreground/20' 
-                    : 'bg-muted'
+                    ? 'bg-white/20' 
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                 }`}>
                   {dept.count}
                 </span>
@@ -223,159 +261,158 @@ export default function TeamPage() {
 
         {/* Сетка сотрудников */}
         <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMembers.map((member) => (
-              <div 
-                key={member.id}
-                className="group relative"
-              >
-                {/* Карточка */}
-                <div className="bg-card border rounded-xl overflow-hidden hover-lift transition-smooth h-full flex flex-col">
-                  {/* Верхняя часть с градиентом */}
-                  <div className="relative p-6 pb-4">
-                    {/* Статус доступности */}
-                    <div className="absolute top-4 right-4">
-                      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                        member.isAvailable 
-                          ? 'bg-green-500/10 text-green-600 border border-green-500/20' 
-                          : 'bg-muted text-muted-foreground border border-border'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full ${member.isAvailable ? 'bg-green-500' : 'bg-muted-foreground'}`} />
-                        {member.isAvailable ? 'Доступен' : 'В работе'}
-                      </div>
-                    </div>
-                    
-                    {/* Основная информация */}
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <member.icon className="w-7 h-7 text-primary" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {filteredMembers.map((member) => {
+              const DeptIcon = getDepartmentIcon(member.department);
+              return (
+                <div 
+                  key={member.id}
+                  className="group"
+                >
+                  {/* Карточка */}
+                  <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden hover:shadow-lg transition-all h-full flex flex-col">
+                    {/* Верхняя часть с градиентом */}
+                    <div className="relative p-4 md:p-6 pb-2 md:pb-4">
+                      {/* Статус доступности */}
+                      <div className="absolute top-3 right-3 md:top-4 md:right-4">
+                        <div className={`flex items-center gap-1 px-2 md:px-3 py-1 rounded-full text-xs font-medium ${
+                          member.isAvailable 
+                            ? 'bg-green-500/10 text-green-600 border border-green-500/20' 
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700'
+                        }`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${member.isAvailable ? 'bg-green-500' : 'bg-gray-400'}`} />
+                          {member.isAvailable ? 'Доступен' : 'В работе'}
+                        </div>
                       </div>
                       
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-lg leading-tight mb-1">{member.name}</h3>
-                        <p className="text-sm text-muted-foreground mb-2">{member.position}</p>
+                      {/* Основная информация */}
+                      <div className="flex items-start gap-3 md:gap-4 mb-4">
+                        <div className="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                          <DeptIcon className="w-6 h-6 md:w-7 md:h-7 text-blue-500" />
+                        </div>
                         
-                        {/* Рейтинг и опыт */}
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                            <span className="text-sm font-semibold">{member.rating}</span>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-base md:text-lg leading-tight mb-1 text-gray-900 dark:text-gray-100">{member.name}</h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{member.position}</p>
+                          
+                          {/* Рейтинг и опыт */}
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex items-center gap-1">
+                              <Star className="w-3 h-3 md:w-4 md:h-4 text-amber-500 fill-amber-500" />
+                              <span className="text-sm font-semibold">{member.rating}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-xs md:text-sm text-gray-500 dark:text-gray-400">
+                              <Briefcase className="w-3 h-3 md:w-4 md:h-4" />
+                              <span>{member.experience}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <Briefcase className="w-4 h-4" />
-                            <span>{member.experience}</span>
+                        </div>
+                      </div>
+
+                      {/* Статистика */}
+                      <div className="grid grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                        <div className="text-center">
+                          <div className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100">{member.projectsCount}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">Проектов</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="flex items-center justify-center gap-1 text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100">
+                            <MapPin className="w-3 h-3 md:w-4 md:h-4" />
+                            {member.location}
                           </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">Локация</div>
+                        </div>
+                      </div>
+
+                      {/* Экспертиза */}
+                      <div className="mb-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target className="w-3 h-3 md:w-4 md:h-4 text-gray-500" />
+                          <span className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400">Специализация:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 md:gap-2">
+                          {member.specialties.slice(0, 2).map((skill, idx) => (
+                            <span 
+                              key={idx}
+                              className="px-2 md:px-3 py-1 text-xs rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                            >
+                              {skill}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     </div>
 
-                    {/* Статистика */}
-                    <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-muted/30 rounded-lg">
-                      <div className="text-center">
-                        <div className="text-lg font-bold">{member.projectsCount}</div>
-                        <div className="text-xs text-muted-foreground">Проектов</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="flex items-center justify-center gap-1 text-lg font-bold">
-                          <MapPin className="w-4 h-4" />
-                          {member.location}
+                    {/* Разделитель */}
+                    <div className="px-4 md:px-6">
+                      <div className="border-t border-gray-200 dark:border-gray-800"></div>
+                    </div>
+
+                    {/* Нижняя часть с действиями */}
+                    <div className="p-4 md:p-6 pt-3 md:pt-4 mt-auto">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-1 md:gap-2">
+                          {member.expertise.slice(0, 2).map((skill, idx) => (
+                            <span 
+                              key={idx}
+                              className="px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                            >
+                              {skill}
+                            </span>
+                          ))}
                         </div>
-                        <div className="text-xs text-muted-foreground">Локация</div>
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedMember(member)}
+                          icon={<ChevronRight className="w-3 h-3 md:w-4 md:h-4" />}
+                          className="text-sm group-hover:text-blue-600"
+                        >
+                          Подробнее
+                        </Button>
                       </div>
-                    </div>
-
-                    {/* Экспертиза */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Target className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium text-muted-foreground">Специализация:</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {member.specialties.slice(0, 2).map((skill, idx) => (
-                          <span 
-                            key={idx}
-                            className="px-3 py-1.5 text-xs rounded-full bg-primary/10 text-primary border border-primary/20"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Разделитель */}
-                  <div className="px-6">
-                    <div className="border-t"></div>
-                  </div>
-
-                  {/* Нижняя часть с действиями */}
-                  <div className="p-6 pt-4 mt-auto">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-wrap gap-2">
-                        {member.expertise.slice(0, 2).map((skill, idx) => (
-                          <span 
-                            key={idx}
-                            className="px-2 py-1 text-xs rounded-full bg-muted text-muted-foreground"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                      
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedMember(member)}
-                        icon={<ChevronRight className="w-4 h-4" />}
-                        className="group-hover:text-primary transition-colors-smooth"
-                      >
-                        Подробнее
-                      </Button>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         {/* Призыв к действию */}
-        <div className="max-w-4xl mx-auto mt-20">
-          <div className="bg-card border rounded-2xl p-12 text-center relative overflow-hidden">
-            <div className="absolute inset-0 bg-grid opacity-5"></div>
+        <div className="max-w-4xl mx-auto mt-12 md:mt-20">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl md:rounded-2xl p-6 md:p-8 lg:p-12 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 md:mb-6">
+              <MessageSquare className="w-4 h-4" />
+              <span className="text-sm font-medium">Готовы к сотрудничеству?</span>
+            </div>
             
-            <div className="relative">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-muted rounded-full mb-6 mx-auto">
-                <MessageSquare className="w-4 h-4" />
-                <span className="text-sm font-medium">Готовы к сотрудничеству?</span>
-              </div>
-              
-              <h2 className="text-3xl font-bold mb-6">
-                Нужна помощь с оборудованием?
-              </h2>
-              
-              <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-                Наши специалисты подберут оптимальное оборудование для вашего мероприятия
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  icon={<Phone className="w-5 h-5" />}
-                  hoverEffect
-                >
-                  <a href="tel:+74951234567">Позвонить</a>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  icon={<Mail className="w-5 h-5" />}
-                  hoverEffect
-                >
-                  <a href="/contact">Написать сообщение</a>
-                </Button>
-              </div>
+            <h2 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6 text-gray-900 dark:text-gray-100">
+              Нужна помощь с оборудованием?
+            </h2>
+            
+            <p className="text-base md:text-lg text-gray-600 dark:text-gray-400 mb-6 md:mb-8 max-w-2xl mx-auto">
+              Наши специалисты подберут оптимальное оборудование для вашего мероприятия
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
+              <Button
+                variant="primary"
+                size="lg"
+                icon={<Phone className="w-4 h-4 md:w-5 md:h-5" />}
+                className="text-sm md:text-base"
+              >
+                <a href="tel:+74951234567">Позвонить</a>
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                icon={<Mail className="w-4 h-4 md:w-5 md:h-5" />}
+                className="text-sm md:text-base"
+              >
+                <a href="/contact">Написать</a>
+              </Button>
             </div>
           </div>
         </div>
@@ -383,24 +420,30 @@ export default function TeamPage() {
 
       {/* Модальное окно */}
       {selectedMember && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-card border rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-start md:items-center justify-center p-2 md:p-4 z-50 overflow-y-auto"
+          onClick={(e) => e.target === e.currentTarget && setSelectedMember(null)}
+        >
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
+            <div className="p-4 md:p-6">
               {/* Шапка */}
-              <div className="flex items-start justify-between mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <selectedMember.icon className="w-10 h-10 text-primary" />
+              <div className="flex items-start justify-between mb-6 md:mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
+                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                    {(() => {
+                      const DeptIcon = getDepartmentIcon(selectedMember.department);
+                      return <DeptIcon className="w-8 h-8 md:w-10 md:h-10 text-blue-500" />;
+                    })()}
                   </div>
                   <div>
-                    <h3 className="font-bold text-2xl mb-1">{selectedMember.name}</h3>
-                    <p className="text-muted-foreground">{selectedMember.position}</p>
-                    <div className="flex items-center gap-4 mt-2">
+                    <h3 className="font-bold text-xl md:text-2xl mb-1 text-gray-900 dark:text-gray-100">{selectedMember.name}</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-2">{selectedMember.position}</p>
+                    <div className="flex flex-wrap items-center gap-3 md:gap-4">
                       <div className="flex items-center gap-1">
                         <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
                         <span className="font-semibold">{selectedMember.rating}</span>
                       </div>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
                         <MapPin className="w-4 h-4" />
                         <span>{selectedMember.location}</span>
                       </div>
@@ -409,33 +452,33 @@ export default function TeamPage() {
                 </div>
                 <button
                   onClick={() => setSelectedMember(null)}
-                  className="p-2 hover:bg-accent rounded-lg transition-colors-smooth"
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
                 >
-                  ✕
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Контент */}
-              <div className="space-y-8">
+              <div className="space-y-6 md:space-y-8">
                 {/* Основная информация */}
-                <div className="grid md:grid-cols-2 gap-6">
+                <div className="grid md:grid-cols-2 gap-4 md:gap-6">
                   <div className="space-y-4">
                     <div>
-                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <h4 className="font-semibold mb-2 flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <Briefcase className="w-4 h-4" />
                         Опыт работы
                       </h4>
-                      <p className="text-muted-foreground">{selectedMember.experience}</p>
+                      <p className="text-gray-600 dark:text-gray-400">{selectedMember.experience}</p>
                     </div>
                     
                     <div>
-                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <h4 className="font-semibold mb-2 flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <Award className="w-4 h-4" />
                         Специализация
                       </h4>
                       <div className="flex flex-wrap gap-2">
                         {selectedMember.specialties.map((item, idx) => (
-                          <span key={idx} className="px-3 py-1.5 text-sm rounded-full bg-primary/10 text-primary border border-primary/20">
+                          <span key={idx} className="px-3 py-1.5 text-sm rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
                             {item}
                           </span>
                         ))}
@@ -445,18 +488,18 @@ export default function TeamPage() {
                   
                   <div className="space-y-4">
                     <div>
-                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <h4 className="font-semibold mb-2 flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <Target className="w-4 h-4" />
                         Статистика
                       </h4>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-muted/30 rounded-lg p-3 text-center">
-                          <div className="text-xl font-bold mb-1">{selectedMember.projectsCount}</div>
-                          <div className="text-xs text-muted-foreground">Проектов</div>
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-center">
+                          <div className="text-xl md:text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">{selectedMember.projectsCount}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">Проектов</div>
                         </div>
-                        <div className="bg-muted/30 rounded-lg p-3 text-center">
-                          <div className="text-xl font-bold mb-1">{selectedMember.rating}/5</div>
-                          <div className="text-xs text-muted-foreground">Рейтинг</div>
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-center">
+                          <div className="text-xl md:text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">{selectedMember.rating}/5</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">Рейтинг</div>
                         </div>
                       </div>
                     </div>
@@ -465,20 +508,20 @@ export default function TeamPage() {
 
                 {/* Биография */}
                 <div>
-                  <h4 className="font-semibold mb-3">О специалисте</h4>
-                  <p className="text-muted-foreground leading-relaxed">
+                  <h4 className="font-semibold mb-3 text-gray-900 dark:text-gray-100">О специалисте</h4>
+                  <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
                     {selectedMember.bio}
                   </p>
                 </div>
 
                 {/* Экспертиза */}
                 <div>
-                  <h4 className="font-semibold mb-3">Экспертиза</h4>
-                  <div className="grid sm:grid-cols-2 gap-3">
+                  <h4 className="font-semibold mb-3 text-gray-900 dark:text-gray-100">Экспертиза</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
                     {selectedMember.expertise.map((skill, idx) => (
-                      <div key={idx} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30">
+                      <div key={idx} className="flex items-center gap-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
                         <CheckCircle className="w-4 h-4 text-green-500" />
-                        <span>{skill}</span>
+                        <span className="text-gray-700 dark:text-gray-300">{skill}</span>
                       </div>
                     ))}
                   </div>
@@ -487,35 +530,34 @@ export default function TeamPage() {
                 {/* Контакты и кнопка */}
                 <div className="space-y-4">
                   <div>
-                    <h4 className="font-semibold mb-3">Контакты</h4>
-                    <div className="grid sm:grid-cols-2 gap-3">
+                    <h4 className="font-semibold mb-3 text-gray-900 dark:text-gray-100">Контакты</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <a 
                         href={`tel:${selectedMember.phone}`}
-                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors-smooth"
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                       >
                         <div className="p-2 rounded-lg bg-blue-500/10">
                           <Phone className="w-5 h-5 text-blue-500" />
                         </div>
-                        <span className="font-medium">{selectedMember.phone}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{selectedMember.phone}</span>
                       </a>
                       <a 
                         href={`mailto:${selectedMember.email}`}
-                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors-smooth"
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                       >
                         <div className="p-2 rounded-lg bg-purple-500/10">
                           <Mail className="w-5 h-5 text-purple-500" />
                         </div>
-                        <span className="font-medium">{selectedMember.email}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{selectedMember.email}</span>
                       </a>
                     </div>
                   </div>
 
                   <Button
                     variant="primary"
-                    className="w-full py-4"
+                    className="w-full py-3 md:py-4"
                     onClick={() => window.location.href = `/contact?specialist=${selectedMember.id}`}
-                    icon={<MessageSquare className="w-5 h-5" />}
-                    hoverEffect
+                    icon={<MessageSquare className="w-4 h-4 md:w-5 md:h-5" />}
                   >
                     Запросить консультацию
                   </Button>
