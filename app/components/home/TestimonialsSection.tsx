@@ -1,5 +1,30 @@
-import { testimonials } from '../shared/constants';
+// app/components/home/TestimonialsSection.tsx
 import TestimonialCard from '../ui/TestimonialCard';
+
+// Локальная константа testimonials
+const testimonials = [
+  {
+    name: 'Александр Петров',
+    role: 'Организатор фестивалей',
+    text: 'EventRent стал нашим стратегическим партнером. Благодаря их оборудованию и поддержке мы провели самые масштабные мероприятия сезона.',
+    rating: 5,
+    initials: 'АП'
+  },
+  {
+    name: 'Марина Иванова',
+    role: 'Event-директор агентства',
+    text: 'Работаем 2 года - ни одной проблемы. Их инженеры всегда на связи, даже в ночь перед мероприятием. Это бесценно!',
+    rating: 5,
+    initials: 'МИ'
+  },
+  {
+    name: 'Дмитрий Сидоров',
+    role: 'Владелец сети клубов',
+    text: 'Лучшее соотношение цена/качество на рынке. Техника всегда в идеальном состоянии, как новая.',
+    rating: 4,
+    initials: 'ДС'
+  },
+];
 
 export default function TestimonialsSection() {
   return (

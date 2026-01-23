@@ -1,5 +1,4 @@
-﻿import Header from './components/layout/Header';
-import Footer from './components/layout/Footer';
+﻿
 import HeroSection from './components/home/HeroSection';
 import CategoriesSection from './components/home/CategoriesSection';
 import PopularEquipmentSection from './components/home/PopularEquipmentSection';
@@ -10,7 +9,6 @@ import CTASection from './components/home/CTASection';
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Header />
       <main>
         <HeroSection />
         <CategoriesSection />
@@ -19,7 +17,6 @@ export default function HomePage() {
         <TestimonialsSection />
         <CTASection />
       </main>
-      <Footer />
     </div>
   );
 }

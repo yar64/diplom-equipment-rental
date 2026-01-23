@@ -1,10 +1,29 @@
+// app/components/home/HeroSection.tsx
 'use client';
 
 import { useState, FormEvent } from 'react';
 import { Sparkles, Award, Users, CheckCircle } from 'lucide-react';
-import { statistics } from '../shared/constants';
 import SearchForm from '../ui/SearchForm';
 import StatCard from '../ui/StatCard';
+
+// Локальная константа statistics
+const statistics = [
+  { 
+    value: '850+', 
+    label: 'Единиц оборудования', 
+    icon: <Award className="w-6 h-6" />
+  },
+  { 
+    value: '2 400+', 
+    label: 'Довольных клиентов', 
+    icon: <Users className="w-6 h-6" />
+  },
+  { 
+    value: '98%', 
+    label: 'Положительных отзывов', 
+    icon: <CheckCircle className="w-6 h-6" />
+  }
+];
 
 export default function HeroSection() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,15 +58,14 @@ export default function HeroSection() {
           </p>
 
           <SearchForm
-  searchQuery={searchQuery}
-  setSearchQuery={setSearchQuery}
-  selectedCategory={selectedCategory}
-  setSelectedCategory={setSelectedCategory}
-  selectedPrice={selectedPrice}
-  setSelectedPrice={setSelectedPrice}
-  onSubmit={handleSearch}
- 
-/>
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+            selectedPrice={selectedPrice}
+            setSelectedPrice={setSelectedPrice}
+            onSubmit={handleSearch}
+          />
 
           <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8">
             {statistics.map((stat, idx) => (
