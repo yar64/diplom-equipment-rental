@@ -1,0 +1,22 @@
+// server/utils/prisma.ts
+import { PrismaClient } from '@prisma/client'
+
+// Глобальная переменная для хранения Prisma Client в development
+const globalForPrisma = globalThis as unknown as {
+    prisma: PrismaClient | undefined
+}
+
+// Создаем или используем существующий инстанс Prisma Client
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+    log: process.env.NODE_ENV === 'development'
+        ? ['query', 'error', 'warn']
+        : ['error'],
+})
+
+// В development сохраняем Prisma Client в глобальной переменной
+// чтобы избежать создания множества инстансов при hot reload
+if (process.env.NODE_ENV !== 'production') {
+    globalForPrisma.prisma = prisma
+}
+
+export default prisma
