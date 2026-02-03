@@ -18,6 +18,34 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
+// Определяем типы для данных
+interface EquipmentItem {
+    id: string
+    name: string
+    categoryId: string
+    // другие поля которые используются
+}
+
+interface CategoryItem {
+    id: string
+    name: string
+    // другие поля которые используются
+}
+
+interface UserItem {
+    id: string
+    // другие поля которые используются
+}
+
+interface BookingItem {
+    id: string
+    equipment: string
+    user: string
+    status: 'подтвержден' | 'ожидает' | 'завершен' | 'отменен'
+    date: string
+    amount: number
+}
+
 export default async function AdminDashboard() {
     const [equipmentResult, categoriesResult, usersResult] = await Promise.all([
         getEquipment(),
@@ -25,12 +53,21 @@ export default async function AdminDashboard() {
         getUsers()
     ])
 
-    const equipment = equipmentResult.success ? equipmentResult.data || [] : []
-    const categories = categoriesResult.success ? categoriesResult.data || [] : []
-    const users = usersResult.success ? usersResult.data || [] : []
+    // Явно указываем типы
+    const equipment = equipmentResult.success
+        ? (equipmentResult.data as EquipmentItem[]) || []
+        : []
+
+    const categories = categoriesResult.success
+        ? (categoriesResult.data as CategoryItem[]) || []
+        : []
+
+    const users = usersResult.success
+        ? (usersResult.data as UserItem[]) || []
+        : []
 
     // Моковые данные для примеров
-    const recentBookings = [
+    const recentBookings: BookingItem[] = [
         { id: '1', equipment: 'Микшер Yamaha CL5', user: 'Иван Иванов', status: 'подтвержден', date: '2024-12-01', amount: 13500 },
         { id: '2', equipment: 'Samsung 55" QLED', user: 'Мария Петрова', status: 'ожидает', date: '2024-11-30', amount: 36000 },
         { id: '3', equipment: 'Проектор Epson EB-U50', user: 'Алексей Сидоров', status: 'завершен', date: '2024-11-28', amount: 10500 },
@@ -41,6 +78,17 @@ export default async function AdminDashboard() {
         ожидает: <Clock className="w-4 h-4 text-yellow-500" />,
         завершен: <CheckCircle className="w-4 h-4 text-blue-500" />,
         отменен: <XCircle className="w-4 h-4 text-red-500" />,
+    }
+
+    // Вспомогательная функция для подсчета оборудования по категории
+    const getEquipmentCountByCategory = (categoryId: string): number => {
+        return equipment.filter((item: EquipmentItem) => item.categoryId === categoryId).length
+    }
+
+    // Вычисляем проценты для каждой категории
+    const getCategoryPercentage = (categoryId: string): number => {
+        const count = getEquipmentCountByCategory(categoryId)
+        return equipment.length > 0 ? (count / equipment.length) * 100 : 0
     }
 
     return (
@@ -118,7 +166,7 @@ export default async function AdminDashboard() {
                                         <div className="flex items-center gap-4">
                                             <span className="font-semibold">{booking.amount.toLocaleString('ru-RU')} ₽</span>
                                             <div className="flex items-center gap-2">
-                                                {statusIcons[booking.status as keyof typeof statusIcons]}
+                                                {statusIcons[booking.status]}
                                                 <span className="text-sm text-muted-foreground capitalize">{booking.status}</span>
                                             </div>
                                         </div>
@@ -136,28 +184,33 @@ export default async function AdminDashboard() {
                         </div>
                         <div className="p-6">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {categories.slice(0, 4).map((category, index) => (
-                                    <div
-                                        key={category.id}
-                                        className="border border-border rounded-lg p-4 hover:border-primary transition-colors-smooth hover-lift"
-                                        style={{ animationDelay: `${index * 100}ms` }}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-medium">{category.name}</span>
-                                            <span className="text-sm text-muted-foreground">
-                                                {equipment.filter(e => e.categoryId === category.id).length} шт.
-                                            </span>
+                                {categories.slice(0, 4).map((category, index) => {
+                                    const equipmentCount = getEquipmentCountByCategory(category.id)
+                                    const percentage = getCategoryPercentage(category.id)
+
+                                    return (
+                                        <div
+                                            key={category.id}
+                                            className="border border-border rounded-lg p-4 hover:border-primary transition-colors-smooth hover-lift"
+                                            style={{ animationDelay: `${index * 100}ms` }}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-medium">{category.name}</span>
+                                                <span className="text-sm text-muted-foreground">
+                                                    {equipmentCount} шт.
+                                                </span>
+                                            </div>
+                                            <div className="mt-3 h-2 w-full bg-muted rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary rounded-full transition-all duration-500"
+                                                    style={{
+                                                        width: `${percentage}%`
+                                                    }}
+                                                ></div>
+                                            </div>
                                         </div>
-                                        <div className="mt-3 h-2 w-full bg-muted rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-primary rounded-full transition-all duration-500"
-                                                style={{
-                                                    width: `${(equipment.filter(e => e.categoryId === category.id).length / equipment.length) * 100}%`
-                                                }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         </div>
                     </div>

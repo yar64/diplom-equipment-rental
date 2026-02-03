@@ -5,7 +5,8 @@ import prisma from '../utils/prisma'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
-// Валидация схемы
+// ==================== ВАЛИДАЦИЯ ====================
+
 const equipmentSchema = z.object({
     name: z.string().min(2, 'Название слишком короткое'),
     description: z.string().min(10, 'Описание слишком короткое'),
@@ -14,7 +15,9 @@ const equipmentSchema = z.object({
     quantity: z.number().int().min(1, 'Количество должно быть не менее 1'),
 })
 
-// Тип для фильтров
+// ==================== ТИПЫ ====================
+
+// Тип для фильтров оборудования
 interface EquipmentFilters {
     categoryId?: string
     search?: string
@@ -24,7 +27,7 @@ interface EquipmentFilters {
     limit?: number
 }
 
-// Тип для ответа
+// Тип для ответа серверных действий
 interface ActionResponse<T = any> {
     success: boolean
     data?: T
@@ -32,24 +35,66 @@ interface ActionResponse<T = any> {
     message?: string
 }
 
+// Тип для избранного
+interface FavoriteResponse {
+    isFavorite: boolean
+}
+
+// Тип для данных создания оборудования
+interface CreateEquipmentData {
+    name: string
+    description: string
+    pricePerDay: number
+    categoryId: string
+    quantity: number
+}
+
+// Тип для данных обновления оборудования
+interface UpdateEquipmentData {
+    name?: string
+    description?: string
+    pricePerDay?: number
+    categoryId?: string
+    quantity?: number
+}
+
+// ==================== ФУНКЦИИ ====================
+
 // Получение оборудования с фильтрами
-export async function getEquipment(filters?: EquipmentFilters): Promise<ActionResponse> {
+export async function getEquipment(
+    filters?: EquipmentFilters
+): Promise<ActionResponse> {
     try {
+        const where: any = {
+            available: true,
+        }
+
+        if (filters?.categoryId) {
+            where.categoryId = filters.categoryId
+        }
+
+        if (filters?.search) {
+            where.OR = [
+                { name: { contains: filters.search } },
+                { description: { contains: filters.search } },
+                { brand: { contains: filters.search } },
+            ]
+        }
+
+        if (filters?.featured !== undefined) {
+            where.featured = filters.featured
+        }
+
+        if (filters?.minPrice !== undefined) {
+            where.pricePerDay = { gte: filters.minPrice }
+        }
+
+        if (filters?.maxPrice !== undefined) {
+            where.pricePerDay = { ...where.pricePerDay, lte: filters.maxPrice }
+        }
+
         const equipment = await prisma.equipment.findMany({
-            where: {
-                ...(filters?.categoryId && { categoryId: filters.categoryId }),
-                ...(filters?.search && {
-                    OR: [
-                        { name: { contains: filters.search, mode: 'insensitive' } },
-                        { description: { contains: filters.search, mode: 'insensitive' } },
-                        { brand: { contains: filters.search, mode: 'insensitive' } },
-                    ],
-                }),
-                ...(filters?.featured !== undefined && { featured: filters.featured }),
-                ...(filters?.minPrice !== undefined && { pricePerDay: { gte: filters.minPrice } }),
-                ...(filters?.maxPrice !== undefined && { pricePerDay: { lte: filters.maxPrice } }),
-                available: true,
-            },
+            where,
             include: {
                 category: true,
                 reviews: {
@@ -69,7 +114,10 @@ export async function getEquipment(filters?: EquipmentFilters): Promise<ActionRe
             take: filters?.limit || 100,
         })
 
-        return { success: true, data: equipment }
+        return {
+            success: true,
+            data: equipment
+        }
     } catch (error: unknown) {
         console.error('Get equipment error:', error)
 
@@ -82,7 +130,9 @@ export async function getEquipment(filters?: EquipmentFilters): Promise<ActionRe
 }
 
 // Получение оборудования по ID
-export async function getEquipmentById(id: string): Promise<ActionResponse> {
+export async function getEquipmentById(
+    id: string
+): Promise<ActionResponse> {
     try {
         const equipment = await prisma.equipment.findUnique({
             where: { id },
@@ -108,7 +158,10 @@ export async function getEquipmentById(id: string): Promise<ActionResponse> {
             return { success: false, error: 'Оборудование не найдено' }
         }
 
-        return { success: true, data: equipment }
+        return {
+            success: true,
+            data: equipment
+        }
     } catch (error: unknown) {
         console.error('Get equipment by id error:', error)
 
@@ -121,14 +174,23 @@ export async function getEquipmentById(id: string): Promise<ActionResponse> {
 }
 
 // Создание оборудования (для админа)
-export async function createEquipment(formData: FormData): Promise<ActionResponse> {
+export async function createEquipment(
+    formData: FormData
+): Promise<ActionResponse> {
     try {
-        const validatedData = equipmentSchema.parse({
+        const rawData = {
             name: formData.get('name'),
             description: formData.get('description'),
-            pricePerDay: Number(formData.get('pricePerDay')),
+            pricePerDay: formData.get('pricePerDay'),
             categoryId: formData.get('categoryId'),
-            quantity: Number(formData.get('quantity')),
+            quantity: formData.get('quantity'),
+        }
+
+        // Парсим и валидируем данные
+        const validatedData = equipmentSchema.parse({
+            ...rawData,
+            pricePerDay: Number(rawData.pricePerDay),
+            quantity: Number(rawData.quantity),
         })
 
         const equipment = await prisma.equipment.create({
@@ -147,11 +209,16 @@ export async function createEquipment(formData: FormData): Promise<ActionRespons
             data: equipment,
             message: 'Оборудование успешно добавлено'
         }
-    } catch (error: unknown) {
+    } catch (error) {
         console.error('Create equipment error:', error)
 
         if (error instanceof z.ZodError) {
-            return { success: false, error: error.errors[0]?.message || 'Ошибка валидации' }
+            // Используем any для временного обхода
+            const zodError = error as any
+            return {
+                success: false,
+                error: zodError.errors?.[0]?.message || 'Ошибка валидации'
+            }
         }
 
         if (error instanceof Error) {
@@ -163,14 +230,23 @@ export async function createEquipment(formData: FormData): Promise<ActionRespons
 }
 
 // Обновление оборудования
-export async function updateEquipment(id: string, formData: FormData): Promise<ActionResponse> {
+export async function updateEquipment(
+    id: string,
+    formData: FormData
+): Promise<ActionResponse> {
     try {
-        const validatedData = equipmentSchema.partial().parse({
+        const rawData = {
             name: formData.get('name'),
             description: formData.get('description'),
-            pricePerDay: formData.get('pricePerDay') ? Number(formData.get('pricePerDay')) : undefined,
+            pricePerDay: formData.get('pricePerDay'),
             categoryId: formData.get('categoryId'),
-            quantity: formData.get('quantity') ? Number(formData.get('quantity')) : undefined,
+            quantity: formData.get('quantity'),
+        }
+
+        const validatedData = equipmentSchema.partial().parse({
+            ...rawData,
+            pricePerDay: rawData.pricePerDay ? Number(rawData.pricePerDay) : undefined,
+            quantity: rawData.quantity ? Number(rawData.quantity) : undefined,
         })
 
         const equipment = await prisma.equipment.update({
@@ -187,11 +263,15 @@ export async function updateEquipment(id: string, formData: FormData): Promise<A
             data: equipment,
             message: 'Оборудование успешно обновлено'
         }
-    } catch (error: unknown) {
+    } catch (error) {
         console.error('Update equipment error:', error)
 
         if (error instanceof z.ZodError) {
-            return { success: false, error: error.errors[0]?.message || 'Ошибка валидации' }
+            const zodError = error as any
+            return {
+                success: false,
+                error: zodError.errors?.[0]?.message || 'Ошибка валидации'
+            }
         }
 
         if (error instanceof Error) {
@@ -203,7 +283,9 @@ export async function updateEquipment(id: string, formData: FormData): Promise<A
 }
 
 // Удаление оборудования
-export async function deleteEquipment(id: string): Promise<ActionResponse> {
+export async function deleteEquipment(
+    id: string
+): Promise<ActionResponse> {
     try {
         await prisma.equipment.delete({
             where: { id },
@@ -231,7 +313,7 @@ export async function deleteEquipment(id: string): Promise<ActionResponse> {
 export async function toggleFavorite(
     equipmentId: string,
     userId: string
-): Promise<ActionResponse<{ isFavorite: boolean }>> {
+): Promise<ActionResponse<FavoriteResponse>> {
     try {
         const existingFavorite = await prisma.favorite.findUnique({
             where: {

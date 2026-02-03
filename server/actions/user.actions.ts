@@ -23,14 +23,56 @@ const updateProfileSchema = z.object({
     avatar: z.string().url('Некорректный URL').optional(),
 })
 
+// Тип для ответа
+interface ActionResponse<T = any> {
+    success: boolean
+    data?: T
+    error?: string
+    message?: string
+}
+
+// Тип для пользователя без пароля
+interface UserProfile {
+    id: string
+    email: string
+    name?: string | null
+    phone?: string | null
+    avatar?: string | null
+    role: string
+    createdAt: Date
+    updatedAt: Date
+    bookings?: any[]
+    favorites?: any[]
+}
+
+// Вспомогательная функция для обработки ошибок Zod
+function getZodErrorMessage(error: unknown): string {
+    if (error instanceof z.ZodError) {
+        // Используем type assertion для доступа к errors
+        const zodError = error as { errors?: Array<{ message?: string }> }
+        if (zodError.errors && zodError.errors.length > 0 && zodError.errors[0].message) {
+            return zodError.errors[0].message
+        }
+    }
+    return 'Ошибка валидации'
+}
+
 // Регистрация пользователя
-export async function register(formData: FormData) {
+export async function register(formData: FormData): Promise<ActionResponse> {
     try {
-        const validatedData = registerSchema.parse({
+        const rawData = {
             email: formData.get('email'),
             password: formData.get('password'),
             name: formData.get('name'),
             phone: formData.get('phone'),
+        }
+
+        const validatedData = registerSchema.parse({
+            ...rawData,
+            email: String(rawData.email),
+            password: String(rawData.password),
+            name: String(rawData.name),
+            phone: rawData.phone ? String(rawData.phone) : undefined,
         })
 
         // Проверяем, существует ли пользователь
@@ -55,8 +97,6 @@ export async function register(formData: FormData) {
             },
         })
 
-        // Здесь можно добавить логику сессии/авторизации
-
         revalidatePath('/profile')
 
         return {
@@ -64,11 +104,18 @@ export async function register(formData: FormData) {
             data: { id: user.id, email: user.email, name: user.name },
             message: 'Регистрация успешна!'
         }
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('Register error:', error)
 
         if (error instanceof z.ZodError) {
-            return { success: false, error: error.errors[0].message }
+            return {
+                success: false,
+                error: getZodErrorMessage(error)
+            }
+        }
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
         }
 
         return { success: false, error: 'Не удалось зарегистрироваться' }
@@ -76,11 +123,17 @@ export async function register(formData: FormData) {
 }
 
 // Авторизация
-export async function login(formData: FormData) {
+export async function login(formData: FormData): Promise<ActionResponse> {
     try {
-        const validatedData = loginSchema.parse({
+        const rawData = {
             email: formData.get('email'),
             password: formData.get('password'),
+        }
+
+        const validatedData = loginSchema.parse({
+            ...rawData,
+            email: String(rawData.email),
+            password: String(rawData.password),
         })
 
         // Ищем пользователя
@@ -99,8 +152,6 @@ export async function login(formData: FormData) {
             return { success: false, error: 'Неверный email или пароль' }
         }
 
-        // Здесь можно добавить создание сессии/JWT токена
-
         revalidatePath('/profile')
 
         return {
@@ -114,11 +165,18 @@ export async function login(formData: FormData) {
             },
             message: 'Вход выполнен успешно!'
         }
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('Login error:', error)
 
         if (error instanceof z.ZodError) {
-            return { success: false, error: error.errors[0].message }
+            return {
+                success: false,
+                error: getZodErrorMessage(error)
+            }
+        }
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
         }
 
         return { success: false, error: 'Не удалось войти' }
@@ -126,7 +184,7 @@ export async function login(formData: FormData) {
 }
 
 // Получение профиля пользователя
-export async function getUserProfile(userId: string) {
+export async function getUserProfile(userId: string): Promise<ActionResponse<UserProfile>> {
     try {
         const user = await prisma.user.findUnique({
             where: { id: userId },
@@ -162,20 +220,38 @@ export async function getUserProfile(userId: string) {
         // Не возвращаем пароль
         const { password, ...userWithoutPassword } = user
 
-        return { success: true, data: userWithoutPassword }
-    } catch (error) {
+        return {
+            success: true,
+            data: userWithoutPassword as UserProfile
+        }
+    } catch (error: unknown) {
         console.error('Get user profile error:', error)
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
+        }
+
         return { success: false, error: 'Не удалось загрузить профиль' }
     }
 }
 
 // Обновление профиля
-export async function updateUserProfile(userId: string, formData: FormData) {
+export async function updateUserProfile(
+    userId: string,
+    formData: FormData
+): Promise<ActionResponse> {
     try {
-        const validatedData = updateProfileSchema.parse({
+        const rawData = {
             name: formData.get('name'),
             phone: formData.get('phone'),
             avatar: formData.get('avatar'),
+        }
+
+        const validatedData = updateProfileSchema.parse({
+            ...rawData,
+            name: rawData.name ? String(rawData.name) : undefined,
+            phone: rawData.phone ? String(rawData.phone) : undefined,
+            avatar: rawData.avatar ? String(rawData.avatar) : undefined,
         })
 
         const user = await prisma.user.update({
@@ -194,11 +270,18 @@ export async function updateUserProfile(userId: string, formData: FormData) {
             },
             message: 'Профиль успешно обновлен'
         }
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('Update profile error:', error)
 
         if (error instanceof z.ZodError) {
-            return { success: false, error: error.errors[0].message }
+            return {
+                success: false,
+                error: getZodErrorMessage(error)
+            }
+        }
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
         }
 
         return { success: false, error: 'Не удалось обновить профиль' }
@@ -206,27 +289,37 @@ export async function updateUserProfile(userId: string, formData: FormData) {
 }
 
 // Выход
-export async function logout() {
-    // Здесь логика удаления сессии/токена
+export async function logout(): Promise<ActionResponse> {
     revalidatePath('/')
     return { success: true, message: 'Выход выполнен' }
 }
 
-export async function getUsers(filters?: {
+// Тип для фильтров пользователей
+interface UserFilters {
     role?: string
     search?: string
-}) {
+}
+
+// Получение пользователей
+export async function getUsers(
+    filters?: UserFilters
+): Promise<ActionResponse> {
     try {
+        const where: any = {}
+
+        if (filters?.role) {
+            where.role = filters.role
+        }
+
+        if (filters?.search) {
+            where.OR = [
+                { name: { contains: filters.search } },
+                { email: { contains: filters.search } },
+            ]
+        }
+
         const users = await prisma.user.findMany({
-            where: {
-                ...(filters?.role && { role: filters.role }),
-                ...(filters?.search && {
-                    OR: [
-                        { name: { contains: filters.search, mode: 'insensitive' } },
-                        { email: { contains: filters.search, mode: 'insensitive' } },
-                    ],
-                }),
-            },
+            where,
             select: {
                 id: true,
                 email: true,
