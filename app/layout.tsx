@@ -1,29 +1,42 @@
-  // app/layout.tsx
-  import type { Metadata } from "next";
-  import { Inter } from "next/font/google";
-  import "./globals.css";
-  import Header from './components/layout/Header';
-  import Footer from './components/layout/Footer';
+// app/layout.tsx
+'use client';
 
-  const inter = Inter({ subsets: ["latin"] });
+import { usePathname } from 'next/navigation';
+import Header from './components/layout/Header';
+import Footer from './components/layout/Footer';
+import './globals.css';
 
-  export const metadata: Metadata = {
-    title: "EventRent - Аренда оборудования для мероприятий",
-    description: "Профессиональная аренда аудио, видео и осветительного оборудования для мероприятий",
-  };
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+  const isAdminPage = pathname?.startsWith('/admin');
+  const isAuthPage = pathname?.startsWith('/login') ||
+    pathname?.startsWith('/register') ||
+    pathname?.startsWith('/forgot-password') ||
+    pathname?.startsWith('/reset-password');
 
-  export default function RootLayout({
-    children,
-  }: Readonly<{
-    children: React.ReactNode;
-  }>) {
-    return (
-      <html lang="ru" className="scroll-smooth">
-        <body className={`${inter.className} antialiased`}>
-          <Header />
+  return (
+    <html lang="ru" className="scroll-smooth">
+      <head>
+        <title>EventRent - Аренда оборудования для мероприятий</title>
+        <meta
+          name="description"
+          content="Профессиональная аренда аудио, видео и осветительного оборудования для мероприятий"
+        />
+      </head>
+      <body className="antialiased">
+        {!isAdminPage && <Header />}
+
+        <main>
           {children}
-          <Footer />
-        </body>
-      </html>
-    );
-  }
+        </main>
+
+        {/* Показываем Footer ТОЛЬКО на обычных страницах */}
+        {!isAdminPage && !isAuthPage && <Footer />}
+      </body>
+    </html>
+  );
+}

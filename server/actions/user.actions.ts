@@ -211,3 +211,50 @@ export async function logout() {
     revalidatePath('/')
     return { success: true, message: 'Выход выполнен' }
 }
+
+export async function getUsers(filters?: {
+    role?: string
+    search?: string
+}) {
+    try {
+        const users = await prisma.user.findMany({
+            where: {
+                ...(filters?.role && { role: filters.role }),
+                ...(filters?.search && {
+                    OR: [
+                        { name: { contains: filters.search, mode: 'insensitive' } },
+                        { email: { contains: filters.search, mode: 'insensitive' } },
+                    ],
+                }),
+            },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                phone: true,
+                role: true,
+                createdAt: true,
+                _count: {
+                    select: {
+                        bookings: true,
+                        favorites: true,
+                        reviews: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        })
+
+        return { success: true, data: users }
+    } catch (error: unknown) {
+        console.error('Get users error:', error)
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
+        }
+
+        return { success: false, error: 'Не удалось загрузить пользователей' }
+    }
+}
