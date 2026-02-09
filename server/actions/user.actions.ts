@@ -351,3 +351,77 @@ export async function getUsers(
         return { success: false, error: 'Не удалось загрузить пользователей' }
     }
 }
+
+// Изменение роли пользователя (для админа)
+export async function updateUserRole(
+    userId: string,
+    newRole: string
+): Promise<ActionResponse> {
+    try {
+        const validRoles = ['ADMIN', 'MANAGER', 'STAFF', 'CUSTOMER']
+
+        if (!validRoles.includes(newRole)) {
+            return { success: false, error: 'Некорректная роль' }
+        }
+
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { role: newRole },
+        })
+
+        revalidatePath('/admin/users')
+
+        return {
+            success: true,
+            data: user,
+            message: `Роль пользователя изменена на "${newRole}"`
+        }
+    } catch (error: any) {
+        console.error('Update user role error:', error)
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
+        }
+
+        return { success: false, error: 'Не удалось изменить роль пользователя' }
+    }
+}
+
+// Удаление пользователя (для админа)
+export async function deleteUser(userId: string): Promise<ActionResponse> {
+    try {
+        // Проверяем, есть ли активные бронирования
+        const activeBookings = await prisma.booking.count({
+            where: {
+                userId,
+                status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] }
+            }
+        })
+
+        if (activeBookings > 0) {
+            return {
+                success: false,
+                error: 'Нельзя удалить пользователя с активными бронированиями'
+            }
+        }
+
+        await prisma.user.delete({
+            where: { id: userId }
+        })
+
+        revalidatePath('/admin/users')
+
+        return {
+            success: true,
+            message: 'Пользователь удален'
+        }
+    } catch (error: any) {
+        console.error('Delete user error:', error)
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
+        }
+
+        return { success: false, error: 'Не удалось удалить пользователя' }
+    }
+}

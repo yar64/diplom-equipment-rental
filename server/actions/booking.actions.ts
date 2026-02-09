@@ -313,3 +313,172 @@ export async function cancelBooking(id: string, userId: string) {
         return { success: false, error: 'Не удалось отменить бронирование' }
     }
 }
+
+// Получение всех бронирований для админки
+export async function getAllBookings(filters?: {
+    status?: string
+    search?: string
+    startDate?: Date
+    endDate?: Date
+    userId?: string
+    equipmentId?: string
+}): Promise<ActionResponse> {
+    try {
+        const where: any = {}
+
+        if (filters?.status) {
+            where.status = filters.status
+        }
+
+        if (filters?.userId) {
+            where.userId = filters.userId
+        }
+
+        if (filters?.equipmentId) {
+            where.equipmentId = filters.equipmentId
+        }
+
+        if (filters?.search) {
+            where.OR = [
+                {
+                    equipment: {
+                        name: { contains: filters.search }
+                    }
+                },
+                {
+                    user: {
+                        OR: [
+                            { name: { contains: filters.search } },
+                            { email: { contains: filters.search } }
+                        ]
+                    }
+                },
+                { eventAddress: { contains: filters.search } },
+                { id: { contains: filters.search } },
+            ]
+        }
+
+        if (filters?.startDate) {
+            where.startDate = { gte: filters.startDate }
+        }
+
+        if (filters?.endDate) {
+            where.endDate = { lte: filters.endDate }
+        }
+
+        const bookings = await prisma.booking.findMany({
+            where,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phone: true,
+                    },
+                },
+                equipment: {
+                    select: {
+                        id: true,
+                        name: true,
+                        pricePerDay: true,
+                        category: {
+                            select: {
+                                name: true,
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        })
+
+        return { success: true, data: bookings }
+    } catch (error: any) {
+        console.error('Get all bookings error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось загрузить бронирования'
+        }
+    }
+}
+
+// Удаление бронирования (для админа)
+export async function deleteBooking(id: string): Promise<ActionResponse> {
+    try {
+        await prisma.booking.delete({
+            where: { id },
+        })
+
+        revalidatePath('/admin/bookings')
+        return {
+            success: true,
+            message: 'Бронирование удалено'
+        }
+    } catch (error: any) {
+        console.error('Delete booking error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось удалить бронирование'
+        }
+    }
+}
+
+// Получение статистики по бронированиям
+export async function getBookingStats(): Promise<ActionResponse> {
+    try {
+        const totalBookings = await prisma.booking.count()
+        const pendingBookings = await prisma.booking.count({ where: { status: 'PENDING' } })
+        const activeBookings = await prisma.booking.count({
+            where: {
+                status: { in: ['CONFIRMED', 'ACTIVE'] }
+            }
+        })
+        const completedBookings = await prisma.booking.count({ where: { status: 'COMPLETED' } })
+
+        const totalRevenue = await prisma.booking.aggregate({
+            _sum: { totalPrice: true },
+            where: {
+                status: { in: ['COMPLETED', 'ACTIVE'] },
+                paymentStatus: 'PAID'
+            }
+        })
+
+        const recentBookings = await prisma.booking.findMany({
+            take: 5,
+            include: {
+                user: { select: { name: true } },
+                equipment: { select: { name: true } },
+            },
+            orderBy: { createdAt: 'desc' }
+        })
+
+        return {
+            success: true,
+            data: {
+                totalBookings,
+                pendingBookings,
+                activeBookings,
+                completedBookings,
+                totalRevenue: totalRevenue._sum.totalPrice || 0,
+                recentBookings
+            }
+        }
+    } catch (error: any) {
+        console.error('Get booking stats error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось получить статистику'
+        }
+    }
+}
+
+// Тип для ActionResponse (добавим в начало файла)
+interface ActionResponse<T = any> {
+    success: boolean
+    data?: T
+    error?: string
+    message?: string
+}

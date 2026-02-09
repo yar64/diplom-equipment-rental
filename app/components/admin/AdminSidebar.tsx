@@ -26,7 +26,6 @@ const navItems = [
         title: 'Обзор',
         items: [
             { href: '/admin', icon: Home, label: 'Панель управления' },
-            { href: '/admin/analytics', icon: BarChart3, label: 'Аналитика' },
         ]
     },
     {
@@ -55,7 +54,6 @@ const navItems = [
     {
         title: 'Система',
         items: [
-            { href: '/admin/database', icon: Database, label: 'База данных' },
             { href: '/admin/settings', icon: Settings, label: 'Настройки' },
         ]
     },

@@ -1,329 +1,587 @@
 // app/admin/page.tsx
-import { getEquipment } from '@/server/actions/equipment.actions'
-import { getCategories } from '@/server/actions/category.actions'
-import { getUsers } from '@/server/actions/user.actions'
-import StatCard from '../components/admin/StatCard'
+'use client'
+
+import { useState, useEffect } from 'react'
 import {
-    Package,
-    Users,
-    Calendar,
-    DollarSign,
-    TrendingUp,
-    CheckCircle,
-    Clock,
-    XCircle,
-    BarChart3,
-    Layers,
-    Activity
+    Package, Users, Calendar, DollarSign, TrendingUp,
+    CheckCircle, Clock, XCircle, BarChart3, Layers,
+    Activity, ShoppingBag, TrendingDown, Eye, Star,
+    Download, Filter, ChevronDown
 } from 'lucide-react'
 import Link from 'next/link'
+import StatCard from '../components/admin/StatCard'
+import {
+    getEquipment,
+    getCategories,
+    getUsers,
+    getAllBookings
+} from '@/server/actions'
 
-// Определяем типы для данных
+// Типы
 interface EquipmentItem {
     id: string
     name: string
     categoryId: string
-    // другие поля которые используются
+    pricePerDay: number
+    available: boolean
+    quantity: number
+    rating?: number
 }
 
 interface CategoryItem {
     id: string
     name: string
-    // другие поля которые используются
 }
 
 interface UserItem {
     id: string
-    // другие поля которые используются
+    email: string
+    name?: string
+    role: string
+    createdAt: string
 }
 
 interface BookingItem {
     id: string
-    equipment: string
-    user: string
-    status: 'подтвержден' | 'ожидает' | 'завершен' | 'отменен'
-    date: string
-    amount: number
+    equipment: {
+        id: string
+        name: string;
+        category: {
+            name: string
+        }
+    }
+    user: {
+        name?: string
+    }
+    status: string
+    totalPrice: number
+    startDate: string
+    endDate: string
 }
 
-export default async function AdminDashboard() {
-    const [equipmentResult, categoriesResult, usersResult] = await Promise.all([
-        getEquipment(),
-        getCategories(),
-        getUsers()
-    ])
+export default function AdminDashboard() {
+    const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
+    const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month')
+    const [loading, setLoading] = useState(true)
+    const [stats, setStats] = useState({
+        equipment: [] as EquipmentItem[],
+        categories: [] as CategoryItem[],
+        users: [] as UserItem[],
+        bookings: [] as BookingItem[],
+    })
 
-    // Явно указываем типы
-    const equipment = equipmentResult.success
-        ? (equipmentResult.data as EquipmentItem[]) || []
-        : []
+    useEffect(() => {
+        loadData()
+    }, [])
 
-    const categories = categoriesResult.success
-        ? (categoriesResult.data as CategoryItem[]) || []
-        : []
+    const loadData = async () => {
+        setLoading(true)
+        try {
+            const [equipmentResult, categoriesResult, usersResult, bookingsResult] = await Promise.all([
+                getEquipment(),
+                getCategories(),
+                getUsers(),
+                getAllBookings ? getAllBookings() : Promise.resolve({ success: true, data: [] })
+            ])
 
-    const users = usersResult.success
-        ? (usersResult.data as UserItem[]) || []
-        : []
-
-    // Моковые данные для примеров
-    const recentBookings: BookingItem[] = [
-        { id: '1', equipment: 'Микшер Yamaha CL5', user: 'Иван Иванов', status: 'подтвержден', date: '2024-12-01', amount: 13500 },
-        { id: '2', equipment: 'Samsung 55" QLED', user: 'Мария Петрова', status: 'ожидает', date: '2024-11-30', amount: 36000 },
-        { id: '3', equipment: 'Проектор Epson EB-U50', user: 'Алексей Сидоров', status: 'завершен', date: '2024-11-28', amount: 10500 },
-    ]
-
-    const statusIcons = {
-        подтвержден: <CheckCircle className="w-4 h-4 text-green-500" />,
-        ожидает: <Clock className="w-4 h-4 text-yellow-500" />,
-        завершен: <CheckCircle className="w-4 h-4 text-blue-500" />,
-        отменен: <XCircle className="w-4 h-4 text-red-500" />,
+            setStats({
+                equipment: equipmentResult.success ? (equipmentResult.data as EquipmentItem[]) || [] : [],
+                categories: categoriesResult.success ? (categoriesResult.data as CategoryItem[]) || [] : [],
+                users: usersResult.success ? (usersResult.data as UserItem[]) || [] : [],
+                bookings: bookingsResult.success ? (bookingsResult.data as BookingItem[]) || [] : [],
+            })
+        } catch (error) {
+            console.error('Error loading data:', error)
+        } finally {
+            setLoading(false)
+        }
     }
 
-    // Вспомогательная функция для подсчета оборудования по категории
-    const getEquipmentCountByCategory = (categoryId: string): number => {
-        return equipment.filter((item: EquipmentItem) => item.categoryId === categoryId).length
+    // Расчеты для аналитики
+    const calculateRevenue = () => {
+        const completedBookings = stats.bookings.filter(b => b.status === 'COMPLETED')
+        return completedBookings.reduce((sum, b) => sum + b.totalPrice, 0)
     }
 
-    // Вычисляем проценты для каждой категории
-    const getCategoryPercentage = (categoryId: string): number => {
-        const count = getEquipmentCountByCategory(categoryId)
-        return equipment.length > 0 ? (count / equipment.length) * 100 : 0
+    const calculateAverageOrderValue = () => {
+        if (stats.bookings.length === 0) return 0
+        const total = stats.bookings.reduce((sum, b) => sum + b.totalPrice, 0)
+        return total / stats.bookings.length
     }
+
+    const getCategoryStats = () => {
+        return stats.categories.map(category => {
+            const equipmentInCategory = stats.equipment.filter(e => e.categoryId === category.id)
+            const bookingsInCategory = stats.bookings.filter(b => {
+                const eq = stats.equipment.find(e => e.id === b.equipment.id)
+                return eq?.categoryId === category.id
+            })
+            const revenue = bookingsInCategory.reduce((sum, b) => sum + b.totalPrice, 0)
+
+            return {
+                name: category.name,
+                equipmentCount: equipmentInCategory.length,
+                bookingCount: bookingsInCategory.length,
+                revenue,
+                percentage: stats.equipment.length > 0
+                    ? (equipmentInCategory.length / stats.equipment.length) * 100
+                    : 0
+            }
+        }).sort((a, b) => b.revenue - a.revenue)
+    }
+
+    const getRecentBookings = () => {
+        return [...stats.bookings]
+            .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+            .slice(0, 5)
+    }
+
+    const getPopularEquipment = () => {
+        return [...stats.equipment]
+            .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+            .slice(0, 5)
+    }
+
+    const getStatusIcon = (status: string) => {
+        switch (status) {
+            case 'CONFIRMED':
+                return <CheckCircle className="w-4 h-4 text-green-500" />
+            case 'PENDING':
+                return <Clock className="w-4 h-4 text-yellow-500" />
+            case 'COMPLETED':
+                return <CheckCircle className="w-4 h-4 text-blue-500" />
+            case 'CANCELLED':
+                return <XCircle className="w-4 h-4 text-red-500" />
+            default:
+                return <Clock className="w-4 h-4 text-gray-500" />
+        }
+    }
+
+    const getStatusText = (status: string) => {
+        switch (status) {
+            case 'PENDING': return 'ожидает'
+            case 'CONFIRMED': return 'подтвержден'
+            case 'ACTIVE': return 'активно'
+            case 'COMPLETED': return 'завершен'
+            case 'CANCELLED': return 'отменен'
+            default: return status
+        }
+    }
+
+    const revenue = calculateRevenue()
+    const avgOrderValue = calculateAverageOrderValue()
+    const categoryStats = getCategoryStats()
+    const recentBookings = getRecentBookings()
+    const popularEquipment = getPopularEquipment()
 
     return (
-        <div className="space-y-8">
-            {/* Заголовок */}
-            <div className="animate-fade-in">
-                <h1 className="text-3xl font-bold tracking-tight">Панель управления</h1>
-                <p className="text-muted-foreground mt-2">
-                    Обзор вашего бизнеса по аренде оборудования
-                </p>
+        <div className="space-y-6">
+            {/* Заголовок и табы */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Панель управления</h1>
+                    <p className="text-muted-foreground mt-1">
+                        Обзор бизнеса и аналитика аренды оборудования
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <div className="flex border border-input rounded-lg">
+                        <button
+                            onClick={() => setActiveTab('overview')}
+                            className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'overview'
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            Обзор
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('analytics')}
+                            className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'analytics'
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            Аналитика
+                        </button>
+                    </div>
+
+                    <select
+                        value={timeRange}
+                        onChange={(e) => setTimeRange(e.target.value as any)}
+                        className="border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                    >
+                        <option value="week">За неделю</option>
+                        <option value="month">За месяц</option>
+                        <option value="year">За год</option>
+                    </select>
+
+                    <button className="flex items-center gap-2 px-4 py-2 border border-input rounded-lg hover:bg-accent transition-colors">
+                        <Download className="w-4 h-4" />
+                        <span className="text-sm">Отчет</span>
+                    </button>
+                </div>
             </div>
 
-            {/* Статистика */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger">
+            {/* Основные показатели */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                    title="Всего оборудования"
-                    value={equipment.length}
-                    icon={<Package className="w-5 h-5" />}
-                    description="В инвентаре"
-                    trend="+12"
+                    title="Общая выручка"
+                    value={`${revenue.toLocaleString('ru-RU')} ₽`}
+                    icon={<DollarSign className="w-5 h-5" />}
+                    description={`За ${timeRange === 'week' ? 'неделю' : timeRange === 'month' ? 'месяц' : 'год'}`}
+                    trend="+18%"
                     delay="100"
                 />
                 <StatCard
-                    title="Клиенты"
-                    value={users.length}
-                    icon={<Users className="w-5 h-5" />}
-                    description="Зарегистрировано"
-                    trend="+5"
+                    title="Всего заказов"
+                    value={stats.bookings.length}
+                    icon={<ShoppingBag className="w-5 h-5" />}
+                    description="Бронирований"
+                    trend="+12"
                     delay="200"
                 />
                 <StatCard
-                    title="Активные аренды"
-                    value="23"
-                    icon={<Calendar className="w-5 h-5" />}
-                    description="На этой неделе"
-                    trend="+8"
+                    title="Средний чек"
+                    value={`${Math.round(avgOrderValue).toLocaleString('ru-RU')} ₽`}
+                    icon={<TrendingUp className="w-5 h-5" />}
+                    description="Средняя стоимость заказа"
+                    trend="+5%"
                     delay="300"
                 />
                 <StatCard
-                    title="Месячная выручка"
-                    value="124 500 ₽"
-                    icon={<DollarSign className="w-5 h-5" />}
-                    description="Общий доход"
-                    trend="+18%"
+                    title="Конверсия"
+                    value="24%"
+                    icon={<TrendingUp className="w-5 h-5" />}
+                    description="Посещения → бронирования"
+                    trend="+2%"
                     delay="400"
                 />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Последние бронирования */}
-                <div className="lg:col-span-2 animate-slide-in" style={{ animationDelay: '200ms' }}>
-                    <div className="border border-border rounded-lg bg-background">
-                        <div className="px-6 py-4 border-b border-border">
-                            <div className="flex items-center justify-between">
+            {activeTab === 'overview' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Левая колонка */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* График доходов */}
+                        <div className="border border-border rounded-lg bg-background p-6">
+                            <div className="flex items-center justify-between mb-6">
                                 <div>
-                                    <h2 className="text-lg font-semibold">Последние бронирования</h2>
-                                    <p className="text-sm text-muted-foreground mt-1">Недавние заказы на аренду</p>
+                                    <h2 className="text-lg font-semibold">Динамика доходов</h2>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Доход по месяцам за последний год
+                                    </p>
                                 </div>
-                                <Link
-                                    href="/admin/bookings"
-                                    className="text-sm font-medium text-foreground hover:text-primary transition-colors-smooth link-underline"
-                                >
-                                    Смотреть все →
-                                </Link>
+                                <Filter className="w-5 h-5 text-muted-foreground" />
                             </div>
-                        </div>
-                        <div className="divide-y divide-border">
-                            {recentBookings.map((booking) => (
-                                <div key={booking.id} className="px-6 py-4 hover:bg-accent/50 transition-colors-smooth">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h3 className="font-medium">{booking.equipment}</h3>
-                                            <p className="text-sm text-muted-foreground">{booking.user} • {booking.date}</p>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <span className="font-semibold">{booking.amount.toLocaleString('ru-RU')} ₽</span>
-                                            <div className="flex items-center gap-2">
-                                                {statusIcons[booking.status]}
-                                                <span className="text-sm text-muted-foreground capitalize">{booking.status}</span>
-                                            </div>
+                            <div className="h-64 flex items-end justify-between gap-2">
+                                {[65, 80, 45, 60, 75, 90, 55, 70, 85, 50, 65, 80].map((height, index) => (
+                                    <div key={index} className="flex-1 flex flex-col items-center">
+                                        <div
+                                            className="w-full bg-gradient-to-t from-primary to-primary/50 rounded-t-lg"
+                                            style={{ height: `${height}%` }}
+                                        />
+                                        <div className="text-xs text-muted-foreground mt-2">
+                                            {['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'][index]}
                                         </div>
                                     </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Категории оборудования */}
+                        <div className="border border-border rounded-lg bg-background">
+                            <div className="px-6 py-4 border-b border-border">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">Эффективность категорий</h2>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            Доход и активность по категориям
+                                        </p>
+                                    </div>
+                                    <Link
+                                        href="/admin/categories"
+                                        className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                                    >
+                                        Смотреть все →
+                                    </Link>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Категории оборудования */}
-                    <div className="mt-6 border border-border rounded-lg bg-background animate-slide-in" style={{ animationDelay: '300ms' }}>
-                        <div className="px-6 py-4 border-b border-border">
-                            <h2 className="text-lg font-semibold">Категории оборудования</h2>
-                            <p className="text-sm text-muted-foreground mt-1">Распределение по типам</p>
-                        </div>
-                        <div className="p-6">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {categories.slice(0, 4).map((category, index) => {
-                                    const equipmentCount = getEquipmentCountByCategory(category.id)
-                                    const percentage = getCategoryPercentage(category.id)
-
-                                    return (
-                                        <div
-                                            key={category.id}
-                                            className="border border-border rounded-lg p-4 hover:border-primary transition-colors-smooth hover-lift"
-                                            style={{ animationDelay: `${index * 100}ms` }}
-                                        >
+                            </div>
+                            <div className="p-6">
+                                <div className="space-y-4">
+                                    {categoryStats.slice(0, 4).map((category, index) => (
+                                        <div key={index} className="space-y-2">
                                             <div className="flex items-center justify-between">
-                                                <span className="font-medium">{category.name}</span>
-                                                <span className="text-sm text-muted-foreground">
-                                                    {equipmentCount} шт.
-                                                </span>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-3 h-3 rounded-full bg-primary"></div>
+                                                    <span className="font-medium">{category.name}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="font-semibold">{category.revenue.toLocaleString('ru-RU')} ₽</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {category.bookingCount} заказов
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="mt-3 h-2 w-full bg-muted rounded-full overflow-hidden">
+                                            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                                                 <div
-                                                    className="h-full bg-primary rounded-full transition-all duration-500"
-                                                    style={{
-                                                        width: `${percentage}%`
-                                                    }}
+                                                    className="h-full bg-gradient-to-r from-primary to-primary/50 rounded-full transition-all duration-500"
+                                                    style={{ width: `${category.percentage}%` }}
                                                 ></div>
                                             </div>
                                         </div>
-                                    )
-                                })}
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Правая колонка */}
+                    <div className="space-y-6">
+                        {/* Топ оборудование */}
+                        <div className="border border-border rounded-lg bg-background p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <Star className="w-5 h-5 text-primary" />
+                                <div>
+                                    <h2 className="text-lg font-semibold">Популярное оборудование</h2>
+                                    <p className="text-sm text-muted-foreground">По рейтингу и спросу</p>
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                {popularEquipment.map((item, index) => (
+                                    <div key={item.id} className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                                                <span className="text-xs font-bold text-primary">
+                                                    #{index + 1}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-sm line-clamp-1">{item.name}</div>
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                    <Star className="w-3 h-3" />
+                                                    <span>{item.rating?.toFixed(1) || 'Нет оценки'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-semibold text-sm">
+                                                {item.pricePerDay.toLocaleString('ru-RU')} ₽/день
+                                            </div>
+                                            <div className={`text-xs ${item.available ? 'text-green-500' : 'text-red-500'}`}>
+                                                {item.available ? 'Доступно' : 'Занято'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Быстрые действия */}
+                        <div className="border border-border rounded-lg bg-background">
+                            <div className="px-6 py-4 border-b border-border">
+                                <h2 className="text-lg font-semibold">Быстрые действия</h2>
+                            </div>
+                            <div className="p-4 space-y-3">
+                                <Link
+                                    href="/admin/equipment/create"
+                                    className="flex items-center gap-3 p-3 border border-input rounded-lg hover:border-primary hover:bg-accent transition-colors"
+                                >
+                                    <div className="p-2 bg-blue-500/10 rounded-lg">
+                                        <Package className="w-4 h-4 text-blue-500" />
+                                    </div>
+                                    <div>
+                                        <div className="font-medium text-sm">Добавить оборудование</div>
+                                        <div className="text-xs text-muted-foreground">Новый элемент инвентаря</div>
+                                    </div>
+                                </Link>
+
+                                <Link
+                                    href="/admin/bookings/create"
+                                    className="flex items-center gap-3 p-3 border border-input rounded-lg hover:border-primary hover:bg-accent transition-colors"
+                                >
+                                    <div className="p-2 bg-green-500/10 rounded-lg">
+                                        <Calendar className="w-4 h-4 text-green-500" />
+                                    </div>
+                                    <div>
+                                        <div className="font-medium text-sm">Создать бронирование</div>
+                                        <div className="text-xs text-muted-foreground">Новый заказ на аренду</div>
+                                    </div>
+                                </Link>
+
+                                <Link
+                                    href="/admin/reports"
+                                    className="flex items-center gap-3 p-3 border border-input rounded-lg hover:border-primary hover:bg-accent transition-colors"
+                                >
+                                    <div className="p-2 bg-purple-500/10 rounded-lg">
+                                        <BarChart3 className="w-4 h-4 text-purple-500" />
+                                    </div>
+                                    <div>
+                                        <div className="font-medium text-sm">Создать отчет</div>
+                                        <div className="text-xs text-muted-foreground">Генерация аналитики</div>
+                                    </div>
+                                </Link>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                {/* Правая колонка */}
-                <div className="space-y-6">
-                    {/* Быстрая статистика */}
-                    <div className="border border-border rounded-lg bg-background p-6 animate-scale-in" style={{ animationDelay: '100ms' }}>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-primary/10 rounded-lg">
-                                <Activity className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-semibold">Быстрая статистика</h2>
-                                <p className="text-sm text-muted-foreground">Активность за сегодня</p>
-                            </div>
-                        </div>
-
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="border border-border rounded-lg bg-background p-6">
+                        <h2 className="text-lg font-semibold mb-4">Статистика бронирований</h2>
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Новые заказы</span>
-                                <span className="font-semibold">3</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                    <span>Подтвержденные</span>
+                                </div>
+                                <span className="font-semibold">
+                                    {stats.bookings.filter(b => b.status === 'CONFIRMED').length}
+                                </span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Доступное оборудование</span>
-                                <span className="font-semibold">18/28</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                    <span>Активные</span>
+                                </div>
+                                <span className="font-semibold">
+                                    {stats.bookings.filter(b => b.status === 'ACTIVE').length}
+                                </span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Ожидают отзывы</span>
-                                <span className="font-semibold">5</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                    <span>Ожидают</span>
+                                </div>
+                                <span className="font-semibold">
+                                    {stats.bookings.filter(b => b.status === 'PENDING').length}
+                                </span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Нагрузка системы</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                    <span>Завершенные</span>
+                                </div>
+                                <span className="font-semibold">
+                                    {stats.bookings.filter(b => b.status === 'COMPLETED').length}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border border-border rounded-lg bg-background p-6">
+                        <h2 className="text-lg font-semibold mb-4">Активность пользователей</h2>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span>Новые пользователи</span>
+                                <span className="font-semibold">
+                                    {stats.users.filter(u =>
+                                        new Date(u.createdAt) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+                                    ).length}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>Активные клиенты</span>
+                                <span className="font-semibold">
+                                    {stats.users.filter(u => u.role === 'CUSTOMER').length}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>Средний чек клиента</span>
+                                <span className="font-semibold">
+                                    {Math.round(avgOrderValue).toLocaleString('ru-RU')} ₽
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border border-border rounded-lg bg-background p-6">
+                        <h2 className="text-lg font-semibold mb-4">Загрузка оборудования</h2>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span>Всего оборудования</span>
+                                <span className="font-semibold">{stats.equipment.length}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>Доступно сейчас</span>
+                                <span className="font-semibold">
+                                    {stats.equipment.filter(e => e.available).length} / {stats.equipment.length}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>Средняя загрузка</span>
+                                <span className="font-semibold">
+                                    {Math.round((stats.bookings.length / stats.equipment.length) * 100)}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border border-border rounded-lg bg-background p-6">
+                        <h2 className="text-lg font-semibold mb-4">Финансовые показатели</h2>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span>Общая выручка</span>
+                                <span className="font-semibold">{revenue.toLocaleString('ru-RU')} ₽</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>Средний чек</span>
+                                <span className="font-semibold">
+                                    {Math.round(avgOrderValue).toLocaleString('ru-RU')} ₽
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>Конверсия</span>
                                 <span className="font-semibold">24%</span>
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
 
-                    {/* Быстрые действия */}
-                    <div className="border border-border rounded-lg bg-background animate-scale-in" style={{ animationDelay: '200ms' }}>
-                        <div className="px-6 py-4 border-b border-border">
-                            <h2 className="text-lg font-semibold">Быстрые действия</h2>
+            {/* Последние бронирования */}
+            <div className="border border-border rounded-lg bg-background">
+                <div className="px-6 py-4 border-b border-border">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">Последние бронирования</h2>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Недавние заказы на аренду
+                            </p>
                         </div>
-                        <div className="p-4 space-y-3">
-                            <Link
-                                href="/admin/equipment/create"
-                                className="flex items-center gap-3 p-3 border border-input rounded-lg hover:border-primary hover:bg-accent transition-colors-smooth"
-                            >
-                                <div className="p-2 bg-primary/10 rounded-lg">
-                                    <Package className="w-4 h-4 text-primary" />
-                                </div>
-                                <div>
-                                    <div className="font-medium text-sm">Добавить оборудование</div>
-                                    <div className="text-xs text-muted-foreground">Новый элемент инвентаря</div>
-                                </div>
-                            </Link>
-
-                            <Link
-                                href="/admin/bookings/create"
-                                className="flex items-center gap-3 p-3 border border-input rounded-lg hover:border-primary hover:bg-accent transition-colors-smooth"
-                            >
-                                <div className="p-2 bg-primary/10 rounded-lg">
-                                    <Calendar className="w-4 h-4 text-primary" />
-                                </div>
-                                <div>
-                                    <div className="font-medium text-sm">Создать бронирование</div>
-                                    <div className="text-xs text-muted-foreground">Новый заказ на аренду</div>
-                                </div>
-                            </Link>
-
-                            <Link
-                                href="/admin/analytics"
-                                className="flex items-center gap-3 p-3 border border-input rounded-lg hover:border-primary hover:bg-accent transition-colors-smooth"
-                            >
-                                <div className="p-2 bg-primary/10 rounded-lg">
-                                    <BarChart3 className="w-4 h-4 text-primary" />
-                                </div>
-                                <div>
-                                    <div className="font-medium text-sm">Аналитика</div>
-                                    <div className="text-xs text-muted-foreground">Отчеты по эффективности</div>
-                                </div>
-                            </Link>
-                        </div>
+                        <Link
+                            href="/admin/bookings"
+                            className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                        >
+                            Смотреть все →
+                        </Link>
                     </div>
-
-                    {/* Статус системы */}
-                    <div className="border border-border rounded-lg bg-background p-6 animate-scale-in" style={{ animationDelay: '300ms' }}>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-green-500/10 rounded-lg">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-semibold">Статус системы</h2>
-                                <p className="text-sm text-muted-foreground">Все системы работают</p>
+                </div>
+                <div className="divide-y divide-border">
+                    {recentBookings.map((booking) => (
+                        <div key={booking.id} className="px-6 py-4 hover:bg-accent/50 transition-colors">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-medium">{booking.equipment.name}</h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        {booking.user.name || 'Без имени'} • {new Date(booking.startDate).toLocaleDateString('ru-RU')}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="font-semibold">
+                                        {booking.totalPrice.toLocaleString('ru-RU')} ₽
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        {getStatusIcon(booking.status)}
+                                        <span className="text-sm text-muted-foreground capitalize">
+                                            {getStatusText(booking.status)}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm">База данных</span>
-                                <span className="text-sm font-medium text-green-500">В сети</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm">API сервисы</span>
-                                <span className="text-sm font-medium text-green-500">Активны</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm">Хранилище</span>
-                                <span className="text-sm font-medium">64% занято</span>
-                            </div>
-                        </div>
-                    </div>
+                    ))}
                 </div>
             </div>
         </div>
