@@ -425,3 +425,90 @@ export async function deleteUser(userId: string): Promise<ActionResponse> {
         return { success: false, error: 'Не удалось удалить пользователя' }
     }
 }
+
+// Создание пользователя администратором (с возможностью задать роль)
+export async function createUser(
+    formData: FormData
+): Promise<ActionResponse> {
+    try {
+        // Валидация для админки (можно задать роль)
+        const adminUserSchema = z.object({
+            email: z.string().email('Некорректный email'),
+            password: z.string().min(6, 'Пароль должен содержать минимум 6 символов'),
+            name: z.string().min(2, 'Имя слишком короткое'),
+            phone: z.string().optional(),
+            role: z.enum(['ADMIN', 'MANAGER', 'STAFF', 'CUSTOMER']).default('CUSTOMER'),
+        })
+
+        const rawData = {
+            email: formData.get('email'),
+            password: formData.get('password'),
+            name: formData.get('name'),
+            phone: formData.get('phone'),
+            role: formData.get('role'),
+        }
+
+        const validatedData = adminUserSchema.parse({
+            ...rawData,
+            email: String(rawData.email),
+            password: String(rawData.password),
+            name: String(rawData.name),
+            phone: rawData.phone ? String(rawData.phone) : undefined,
+            role: rawData.role ? String(rawData.role) : 'CUSTOMER',
+        })
+
+        // Проверяем, существует ли пользователь
+        const existingUser = await prisma.user.findUnique({
+            where: { email: validatedData.email },
+        })
+
+        if (existingUser) {
+            return { success: false, error: 'Пользователь с таким email уже существует' }
+        }
+
+        // Хешируем пароль
+        const hashedPassword = await bcrypt.hash(validatedData.password, 10)
+
+        // Создаем пользователя
+        const user = await prisma.user.create({
+            data: {
+                email: validatedData.email,
+                password: hashedPassword,
+                name: validatedData.name,
+                phone: validatedData.phone,
+                role: validatedData.role,
+            },
+        })
+
+        revalidatePath('/admin/users')
+
+        return {
+            success: true,
+            data: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role
+            },
+            message: 'Пользователь успешно создан!'
+        }
+    } catch (error: unknown) {
+        console.error('Create user error:', error)
+
+        if (error instanceof z.ZodError) {
+            const zodError = error as { errors?: Array<{ message?: string }> }
+            if (zodError.errors && zodError.errors.length > 0 && zodError.errors[0].message) {
+                return {
+                    success: false,
+                    error: zodError.errors[0].message
+                }
+            }
+        }
+
+        if (error instanceof Error) {
+            return { success: false, error: error.message }
+        }
+
+        return { success: false, error: 'Не удалось создать пользователя' }
+    }
+}

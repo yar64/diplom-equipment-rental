@@ -266,3 +266,237 @@ export async function deleteReview(reviewId: string, userId: string) {
         return { success: false, error: 'Не удалось удалить отзыв' }
     }
 }
+
+// Получение всех отзывов для админки
+export async function getAllReviews(filters?: {
+    rating?: number
+    verified?: boolean
+    search?: string
+    equipmentId?: string
+    userId?: string
+}): Promise<ActionResponse> {
+    try {
+        const where: any = {}
+
+        if (filters?.rating) {
+            where.rating = filters.rating
+        }
+
+        if (filters?.verified !== undefined) {
+            where.isVerified = filters.verified
+        }
+
+        if (filters?.equipmentId) {
+            where.equipmentId = filters.equipmentId
+        }
+
+        if (filters?.userId) {
+            where.userId = filters.userId
+        }
+
+        if (filters?.search) {
+            where.OR = [
+                {
+                    equipment: {
+                        name: { contains: filters.search }
+                    }
+                },
+                {
+                    user: {
+                        name: { contains: filters.search }
+                    }
+                },
+                { comment: { contains: filters.search } },
+            ]
+        }
+
+        const reviews = await prisma.review.findMany({
+            where,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        avatar: true,
+                    },
+                },
+                equipment: {
+                    select: {
+                        id: true,
+                        name: true,
+                        category: {
+                            select: {
+                                name: true,
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        })
+
+        return { success: true, data: reviews }
+    } catch (error: any) {
+        console.error('Get all reviews error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось загрузить отзывы'
+        }
+    }
+}
+
+// Обновление статуса верификации отзыва
+export async function toggleReviewVerification(reviewId: string): Promise<ActionResponse> {
+    try {
+        const review = await prisma.review.findUnique({
+            where: { id: reviewId },
+            include: {
+                equipment: true,
+            },
+        })
+
+        if (!review) {
+            return { success: false, error: 'Отзыв не найден' }
+        }
+
+        const updatedReview = await prisma.review.update({
+            where: { id: reviewId },
+            data: {
+                isVerified: !review.isVerified,
+            },
+        })
+
+        revalidatePath('/admin/reviews')
+        revalidatePath(`/equipment/${review.equipment.slug}`)
+
+        return {
+            success: true,
+            data: updatedReview,
+            message: `Отзыв ${updatedReview.isVerified ? 'верифицирован' : 'снята верификация'}`
+        }
+    } catch (error: any) {
+        console.error('Toggle review verification error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось обновить статус отзыва'
+        }
+    }
+}
+
+// Получение статистики по отзывам
+export async function getReviewStats(): Promise<ActionResponse> {
+    try {
+        const totalReviews = await prisma.review.count()
+        const verifiedReviews = await prisma.review.count({ where: { isVerified: true } })
+        const averageRating = await prisma.review.aggregate({
+            _avg: { rating: true }
+        })
+
+        const ratingDistribution = await prisma.review.groupBy({
+            by: ['rating'],
+            _count: {
+                rating: true,
+            },
+            orderBy: {
+                rating: 'desc',
+            },
+        })
+
+        const recentReviews = await prisma.review.findMany({
+            take: 5,
+            include: {
+                user: { select: { name: true } },
+                equipment: { select: { name: true } },
+            },
+            orderBy: { createdAt: 'desc' }
+        })
+
+        return {
+            success: true,
+            data: {
+                totalReviews,
+                verifiedReviews,
+                averageRating: averageRating._avg.rating || 0,
+                ratingDistribution,
+                recentReviews
+            }
+        }
+    } catch (error: any) {
+        console.error('Get review stats error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось получить статистику'
+        }
+    }
+}
+
+// Удаление отзыва (для админа)
+export async function adminDeleteReview(reviewId: string): Promise<ActionResponse> {
+    try {
+        const review = await prisma.review.findUnique({
+            where: { id: reviewId },
+            include: {
+                equipment: true,
+            },
+        })
+
+        if (!review) {
+            return { success: false, error: 'Отзыв не найден' }
+        }
+
+        await prisma.review.delete({
+            where: { id: reviewId },
+        })
+
+        // Обновляем рейтинг оборудования
+        const remainingReviews = await prisma.review.findMany({
+            where: { equipmentId: review.equipmentId },
+            select: { rating: true },
+        })
+
+        if (remainingReviews.length > 0) {
+            const averageRating = remainingReviews.reduce((sum, r) => sum + r.rating, 0) / remainingReviews.length
+
+            await prisma.equipment.update({
+                where: { id: review.equipmentId },
+                data: {
+                    rating: averageRating,
+                    reviewCount: remainingReviews.length,
+                },
+            })
+        } else {
+            await prisma.equipment.update({
+                where: { id: review.equipmentId },
+                data: {
+                    rating: null,
+                    reviewCount: 0,
+                },
+            })
+        }
+
+        revalidatePath('/admin/reviews')
+        revalidatePath(`/equipment/${review.equipment.slug}`)
+
+        return {
+            success: true,
+            message: 'Отзыв удален'
+        }
+    } catch (error: any) {
+        console.error('Admin delete review error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось удалить отзыв'
+        }
+    }
+}
+
+// Тип для ActionResponse (добавим в начало файла)
+interface ActionResponse<T = any> {
+    success: boolean
+    data?: T
+    error?: string
+    message?: string
+}

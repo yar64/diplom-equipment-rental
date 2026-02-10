@@ -2,21 +2,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-  LogIn, 
-  UserPlus, 
-  Key, 
-  Mail, 
-  User, 
+import {
+  LogIn,
+  UserPlus,
+  Key,
+  Mail,
+  User,
   Building,
   Phone,
   ArrowLeft,
-  Check
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import FormWrapper from '../components/login/FormWrapper';
+import { login as loginAction, register as registerAction } from '@/server/actions/user.actions';
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -25,6 +27,14 @@ interface AuthButton {
   label: string;
   icon: React.ReactNode;
   description: string;
+}
+
+interface UserData {
+  id: string;
+  email: string;
+  name?: string;
+  role: string;
+  avatar?: string;
 }
 
 export default function LoginPage() {
@@ -37,6 +47,11 @@ export default function LoginPage() {
   const [hoveredButton, setHoveredButton] = useState<AuthMode | null>(null);
   const [isGoingBack, setIsGoingBack] = useState(false);
   const [isClient, setIsClient] = useState(false);
+
+  // Состояния для ошибок
+  const [loginError, setLoginError] = useState('');
+  const [registerError, setRegisterError] = useState('');
+  const [resetError, setResetError] = useState('');
 
   // Данные форм
   const [loginData, setLoginData] = useState({
@@ -88,6 +103,11 @@ export default function LoginPage() {
 
   // Обработчик смены режима с плавным переходом
   const handleModeChange = (newMode: AuthMode) => {
+    // Сбрасываем ошибки при смене режима
+    setLoginError('');
+    setRegisterError('');
+    setResetError('');
+
     setIsGoingBack(false);
     setPreviousMode(mode);
     setNextMode(newMode);
@@ -116,46 +136,117 @@ export default function LoginPage() {
     }, 300);
   };
 
-  // Обработчики форм
+  // Сохраняем пользователя в localStorage
+  const saveUserToLocalStorage = (userData: UserData) => {
+    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('isAuthenticated', 'true');
+    localStorage.setItem('lastLogin', new Date().toISOString());
+
+    // Если пользователь выбрал "Запомнить меня"
+    if (loginData.remember) {
+      localStorage.setItem('rememberMe', 'true');
+    } else {
+      sessionStorage.setItem('userSession', JSON.stringify(userData));
+    }
+  };
+
+  // Обработчик входа
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
     setIsLoading(true);
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      router.push('/profile');
-    } catch (error) {
+      // Создаем FormData для передачи в серверный экшен
+      const formData = new FormData();
+      formData.append('email', loginData.email);
+      formData.append('password', loginData.password);
+
+      // Вызываем серверный экшен
+      const result = await loginAction(formData);
+
+      if (result.success && result.data) {
+        // Сохраняем данные пользователя
+        const userData = result.data as UserData;
+        saveUserToLocalStorage(userData);
+
+        // Показываем сообщение об успехе
+        alert(result.message || 'Вход выполнен успешно!');
+
+        // Редирект в зависимости от роли пользователя
+        if (userData.role === 'ADMIN' || userData.role === 'MANAGER' || userData.role === 'STAFF') {
+          router.push('/admin');
+        } else {
+          router.push('/profile');
+        }
+      } else {
+        setLoginError(result.error || 'Ошибка при входе');
+      }
+    } catch (error: any) {
       console.error('Login error:', error);
+      setLoginError(error.message || 'Произошла ошибка при входе');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Обработчик регистрации
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setRegisterError('');
 
     if (registerData.password !== registerData.confirmPassword) {
-      alert('Пароли не совпадают');
-      setIsLoading(false);
+      setRegisterError('Пароли не совпадают');
       return;
     }
 
     if (!registerData.agreeToTerms) {
-      alert('Необходимо согласиться с условиями');
-      setIsLoading(false);
+      setRegisterError('Необходимо согласиться с условиями');
       return;
     }
 
+    setIsLoading(true);
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      handleBack();
-      setLoginData({
-        ...loginData,
-        email: registerData.email,
-      });
-      alert('Регистрация успешна! Теперь войдите в аккаунт.');
-    } catch (error) {
+      // Создаем FormData для передачи в серверный экшен
+      const formData = new FormData();
+      formData.append('name', registerData.name);
+      formData.append('email', registerData.email);
+      formData.append('phone', registerData.phone || '');
+      formData.append('password', registerData.password);
+
+      // Вызываем серверный экшен
+      const result = await registerAction(formData);
+
+      if (result.success) {
+        // Очищаем форму
+        setRegisterData({
+          name: '',
+          email: '',
+          phone: '',
+          company: '',
+          password: '',
+          confirmPassword: '',
+          agreeToTerms: false,
+        });
+
+        // Переключаемся на режим входа
+        handleModeChange('login');
+
+        // Заполняем email в форме входа
+        setLoginData(prev => ({
+          ...prev,
+          email: registerData.email
+        }));
+
+        // Показываем сообщение об успехе
+        alert(result.message || 'Регистрация успешна! Теперь войдите в аккаунт.');
+      } else {
+        setRegisterError(result.error || 'Ошибка при регистрации');
+      }
+    } catch (error: any) {
       console.error('Register error:', error);
+      setRegisterError(error.message || 'Произошла ошибка при регистрации');
     } finally {
       setIsLoading(false);
     }
@@ -178,7 +269,7 @@ export default function LoginPage() {
   // Получение анимации для формы в зависимости от режима
   const getFormAnimation = () => {
     if (!mode) return '';
-    
+
     if (previousMode === null && !isGoingBack) {
       switch (mode) {
         case 'login':
@@ -218,25 +309,34 @@ export default function LoginPage() {
           title="Вход в аккаунт"
           subtitle="Войдите в существующий аккаунт"
         >
+          {loginError && (
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2 text-destructive text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{loginError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-4">
             <Input
               label="Email"
               type="email"
               value={loginData.email}
-              onChange={(e) => setLoginData({...loginData, email: e.target.value})}
+              onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
               placeholder="your@email.com"
               icon={<Mail className="w-4 h-4" />}
               required
+              error={loginError ? '' : undefined} // Убираем стандартную ошибку, если есть общая
             />
 
             <Input
               label="Пароль"
               type="password"
               value={loginData.password}
-              onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+              onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
               placeholder="Введите пароль"
               icon={<Key className="w-4 h-4" />}
               required
+              error={loginError ? '' : undefined}
             />
 
             <div className="flex items-center justify-between text-sm">
@@ -245,7 +345,7 @@ export default function LoginPage() {
                   <input
                     type="checkbox"
                     checked={loginData.remember}
-                    onChange={(e) => setLoginData({...loginData, remember: e.target.checked})}
+                    onChange={(e) => setLoginData({ ...loginData, remember: e.target.checked })}
                     className="sr-only"
                   />
                   <div className={`w-4 h-4 border rounded flex items-center justify-center transition-all ${loginData.remember ? 'bg-gray-800 border-gray-800' : 'border-gray-300'}`}>
@@ -283,13 +383,20 @@ export default function LoginPage() {
           title="Создать аккаунт"
           subtitle="Заполните форму для регистрации"
         >
+          {registerError && (
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2 text-destructive text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{registerError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="grid md:grid-cols-2 gap-3">
               <Input
                 label="ФИО *"
                 type="text"
                 value={registerData.name}
-                onChange={(e) => setRegisterData({...registerData, name: e.target.value})}
+                onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
                 placeholder="Иван Иванов"
                 icon={<User className="w-4 h-4" />}
                 required
@@ -300,7 +407,7 @@ export default function LoginPage() {
                 label="Email *"
                 type="email"
                 value={registerData.email}
-                onChange={(e) => setRegisterData({...registerData, email: e.target.value})}
+                onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                 placeholder="your@email.com"
                 icon={<Mail className="w-4 h-4" />}
                 required
@@ -311,7 +418,7 @@ export default function LoginPage() {
                 label="Телефон"
                 type="tel"
                 value={registerData.phone}
-                onChange={(e) => setRegisterData({...registerData, phone: e.target.value})}
+                onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
                 placeholder="+7 (999) 123-45-67"
                 icon={<Phone className="w-4 h-4" />}
                 inputSize="sm"
@@ -321,7 +428,7 @@ export default function LoginPage() {
                 label="Компания"
                 type="text"
                 value={registerData.company}
-                onChange={(e) => setRegisterData({...registerData, company: e.target.value})}
+                onChange={(e) => setRegisterData({ ...registerData, company: e.target.value })}
                 placeholder="Название компании"
                 icon={<Building className="w-4 h-4" />}
                 inputSize="sm"
@@ -331,7 +438,7 @@ export default function LoginPage() {
                 label="Пароль *"
                 type="password"
                 value={registerData.password}
-                onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
+                onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                 placeholder="Минимум 6 символов"
                 icon={<Key className="w-4 h-4" />}
                 required
@@ -343,7 +450,7 @@ export default function LoginPage() {
                 label="Подтверждение *"
                 type="password"
                 value={registerData.confirmPassword}
-                onChange={(e) => setRegisterData({...registerData, confirmPassword: e.target.value})}
+                onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
                 placeholder="Повторите пароль"
                 icon={<Key className="w-4 h-4" />}
                 required
@@ -356,7 +463,7 @@ export default function LoginPage() {
                 <input
                   type="checkbox"
                   checked={registerData.agreeToTerms}
-                  onChange={(e) => setRegisterData({...registerData, agreeToTerms: e.target.checked})}
+                  onChange={(e) => setRegisterData({ ...registerData, agreeToTerms: e.target.checked })}
                   className="sr-only"
                 />
                 <div className={`w-4 h-4 border rounded flex items-center justify-center transition-all ${registerData.agreeToTerms ? 'bg-gray-800 border-gray-800' : 'border-gray-300'}`}>
@@ -388,12 +495,19 @@ export default function LoginPage() {
           title="Восстановление доступа"
           subtitle="Введите email, указанный при регистрации"
         >
+          {resetError && (
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2 text-destructive text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{resetError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleReset} className="space-y-4">
             <Input
               label="Email *"
               type="email"
               value={resetData.email}
-              onChange={(e) => setResetData({...resetData, email: e.target.value})}
+              onChange={(e) => setResetData({ ...resetData, email: e.target.value })}
               placeholder="your@email.com"
               icon={<Mail className="w-4 h-4" />}
               required
@@ -487,7 +601,7 @@ export default function LoginPage() {
         <div className="bg-white border border-gray-300 rounded overflow-hidden h-[500px]">
           {/* Контейнер для всего контента */}
           <div className={`relative h-full ${isTransitioning ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}>
-            
+
             {/* Кнопка возврата (если выбран режим) */}
             {mode && (
               <button
@@ -507,7 +621,7 @@ export default function LoginPage() {
                   {/* Вертикальные линии-разделители */}
                   <div className="absolute left-1/3 top-0 bottom-0 border-l border-gray-300"></div>
                   <div className="absolute left-2/3 top-0 bottom-0 border-l border-gray-300"></div>
-                  
+
                   {authButtons.map((button) => (
                     <div
                       key={button.id}
@@ -518,16 +632,15 @@ export default function LoginPage() {
                     >
                       {/* Вся секция кликабельна */}
                       <div className="absolute inset-0 cursor-pointer" />
-                      
+
                       {/* Контент */}
                       <div className="relative z-10 w-full h-full flex flex-col items-center justify-center">
-                        
+
                         {/* Кнопка с использованием вашего компонента Button */}
-                        <div className={`w-full transition-all duration-300 ease-out ${
-                          hoveredButton === button.id 
+                        <div className={`w-full transition-all duration-300 ease-out ${hoveredButton === button.id
                             ? 'transform translate-y-20'
                             : ''
-                        }`}>
+                          }`}>
                           <Button
                             variant="primary"
                             size="lg"
@@ -539,11 +652,10 @@ export default function LoginPage() {
                         </div>
 
                         {/* Контент при наведении */}
-                        <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 ${
-                          hoveredButton === button.id 
-                            ? 'opacity-100' 
+                        <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 ${hoveredButton === button.id
+                            ? 'opacity-100'
                             : 'opacity-0 pointer-events-none'
-                        }`}>
+                          }`}>
                           <div className="text-gray-700 mb-4">
                             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center transition-transform-smooth">
                               {button.icon}
@@ -553,7 +665,7 @@ export default function LoginPage() {
                             {button.description}
                           </p>
                         </div>
-                        
+
                       </div>
                     </div>
                   ))}
