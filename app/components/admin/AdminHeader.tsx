@@ -1,31 +1,23 @@
 // components/admin/AdminHeader.tsx
 'use client'
 
-import { Search, Bell, HelpCircle, User, Filter } from 'lucide-react'
+import { Bell, HelpCircle, User, Filter } from 'lucide-react'
 import { useState } from 'react'
+import GlobalSearch from './GlobalSearch'
 
 export default function AdminHeader() {
-    const [search, setSearch] = useState('')
+    const [showSearch, setShowSearch] = useState(false)
 
     return (
         <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-sm">
             <div className="px-8 py-4">
                 <div className="flex items-center justify-between gap-6">
-                    {/* Поиск */}
+                    {/* Поиск - используем наш новый компонент */}
                     <div className="flex-1 max-w-xl">
-                        <div className="relative animate-fade-in">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <input
-                                type="text"
-                                placeholder="Поиск оборудования, клиентов, заказов..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent text-sm placeholder:text-muted-foreground transition-smooth"
-                            />
-                        </div>
+                        <GlobalSearch />
                     </div>
 
-                    {/* Правая часть */}
+                    {/* Правая часть (без изменений) */}
                     <div className="flex items-center gap-3">
                         <button className="p-2.5 border border-input rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-smooth">
                             <Filter className="w-4 h-4" />
@@ -54,7 +46,7 @@ export default function AdminHeader() {
                     </div>
                 </div>
 
-                {/* Быстрая статистика */}
+                {/* Быстрая статистика (без изменений) */}
                 <div className="mt-4 flex items-center gap-6 text-sm animate-fade-in-up">
                     <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
