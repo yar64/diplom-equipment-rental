@@ -1,32 +1,28 @@
 // components/admin/AdminHeader.tsx
 'use client'
 
-import { Bell, HelpCircle, User, Filter } from 'lucide-react'
-import { useState } from 'react'
+import { HelpCircle, User, Filter } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
+import NotificationDropdown from './NotificationDropdown'
 
 export default function AdminHeader() {
-    const [showSearch, setShowSearch] = useState(false)
-
     return (
         <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-sm">
             <div className="px-8 py-4">
                 <div className="flex items-center justify-between gap-6">
-                    {/* Поиск - используем наш новый компонент */}
+                    {/* Поиск */}
                     <div className="flex-1 max-w-xl">
                         <GlobalSearch />
                     </div>
 
-                    {/* Правая часть (без изменений) */}
+                    {/* Правая часть */}
                     <div className="flex items-center gap-3">
                         <button className="p-2.5 border border-input rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-smooth">
                             <Filter className="w-4 h-4" />
                         </button>
 
-                        <button className="p-2.5 border border-input rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-smooth relative">
-                            <Bell className="w-4 h-4" />
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-background"></span>
-                        </button>
+                        {/* Уведомления - ЗАМЕНИЛИ на компонент */}
+                        <NotificationDropdown />
 
                         <button className="p-2.5 border border-input rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-smooth">
                             <HelpCircle className="w-4 h-4" />
@@ -46,7 +42,7 @@ export default function AdminHeader() {
                     </div>
                 </div>
 
-                {/* Быстрая статистика (без изменений) */}
+                {/* Быстрая статистика */}
                 <div className="mt-4 flex items-center gap-6 text-sm animate-fade-in-up">
                     <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
