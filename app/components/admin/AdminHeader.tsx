@@ -1,9 +1,10 @@
 // components/admin/AdminHeader.tsx
 'use client'
 
-import { HelpCircle, User, Filter } from 'lucide-react'
+import { HelpCircle, User } from 'lucide-react'
 import GlobalSearch from './GlobalSearch'
 import NotificationDropdown from './NotificationDropdown'
+import FilterDropdown from './FilterDropdown'
 
 export default function AdminHeader() {
     return (
@@ -17,16 +18,13 @@ export default function AdminHeader() {
 
                     {/* Правая часть */}
                     <div className="flex items-center gap-3">
-                        <button className="p-2.5 border border-input rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-smooth">
-                            <Filter className="w-4 h-4" />
-                        </button>
+                        {/* Кнопка фильтра */}
+                        <FilterDropdown />
 
-                        {/* Уведомления - ЗАМЕНИЛИ на компонент */}
+                        {/* Уведомления */}
                         <NotificationDropdown />
 
-                        <button className="p-2.5 border border-input rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-smooth">
-                            <HelpCircle className="w-4 h-4" />
-                        </button>
+                        {/* Кнопка помощи — УДАЛЕНА */}
 
                         <div className="h-6 w-px bg-border"></div>
 

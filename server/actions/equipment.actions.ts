@@ -10,9 +10,21 @@ import { z } from 'zod'
 const equipmentSchema = z.object({
     name: z.string().min(2, 'Название слишком короткое'),
     description: z.string().min(10, 'Описание слишком короткое'),
+    fullDescription: z.string().optional(), // ← optional
     pricePerDay: z.number().positive('Цена должна быть положительной'),
+    pricePerWeek: z.number().positive().optional(),
+    pricePerMonth: z.number().positive().optional(),
     categoryId: z.string().min(1, 'Выберите категорию'),
     quantity: z.number().int().min(1, 'Количество должно быть не менее 1'),
+    brand: z.string().optional(),
+    model: z.string().optional(),
+    weight: z.number().optional(),
+    dimensions: z.string().optional(),
+    powerRequirements: z.string().optional(),
+    available: z.boolean().default(true),
+    featured: z.boolean().default(false),
+    mainImage: z.string().optional(),
+    serialNumber: z.string().optional(),
 })
 
 // ==================== ТИПЫ ====================
@@ -21,10 +33,11 @@ const equipmentSchema = z.object({
 interface EquipmentFilters {
     categoryId?: string
     search?: string
-    featured?: boolean
+    featured?: boolean | string
     minPrice?: number
     maxPrice?: number
     limit?: number
+    available?: boolean | string  // ← добавить строковый тип для select
 }
 
 // Тип для ответа серверных действий
@@ -44,9 +57,21 @@ interface FavoriteResponse {
 interface CreateEquipmentData {
     name: string
     description: string
+    fullDescription?: string
     pricePerDay: number
+    pricePerWeek?: number
+    pricePerMonth?: number
     categoryId: string
     quantity: number
+    brand?: string
+    model?: string
+    weight?: number
+    dimensions?: string
+    powerRequirements?: string
+    available: boolean
+    featured: boolean
+    mainImage?: string
+    serialNumber?: string
 }
 
 // Тип для данных обновления оборудования
@@ -66,7 +91,7 @@ export async function getEquipment(
 ): Promise<ActionResponse> {
     try {
         const where: any = {
-            available: true,
+            //available: true,
         }
 
         if (filters?.categoryId) {
@@ -81,8 +106,22 @@ export async function getEquipment(
             ]
         }
 
-        if (filters?.featured !== undefined) {
-            where.featured = filters.featured
+        // ✅ ИСПРАВЛЕНО: Фильтр по статусу доступности
+        if (filters?.available !== undefined && filters.available !== '') {
+            if (typeof filters.available === 'string') {
+                where.available = filters.available === 'true'
+            } else {
+                where.available = filters.available
+            }
+        }
+
+        // ✅ ИСПРАВЛЕНО: Фильтр по рекомендуемым
+        if (filters?.featured !== undefined && filters.featured !== '') {
+            if (typeof filters.featured === 'string') {
+                where.featured = filters.featured === 'true'
+            } else {
+                where.featured = filters.featured
+            }
         }
 
         if (filters?.minPrice !== undefined) {
@@ -92,6 +131,8 @@ export async function getEquipment(
         if (filters?.maxPrice !== undefined) {
             where.pricePerDay = { ...where.pricePerDay, lte: filters.maxPrice }
         }
+
+        console.log('🔍 Применяемые фильтры:', where)
 
         const equipment = await prisma.equipment.findMany({
             where,
@@ -147,9 +188,6 @@ export async function getEquipmentById(
                             },
                         },
                     },
-                    orderBy: {
-                        createdAt: 'desc',
-                    },
                 },
             },
         })
@@ -178,19 +216,60 @@ export async function createEquipment(
     formData: FormData
 ): Promise<ActionResponse> {
     try {
-        const rawData = {
-            name: formData.get('name'),
-            description: formData.get('description'),
-            pricePerDay: formData.get('pricePerDay'),
-            categoryId: formData.get('categoryId'),
-            quantity: formData.get('quantity'),
+        // Функция для безопасного получения значения из FormData
+        const getValue = (key: string): string | undefined => {
+            const value = formData.get(key)
+            return value ? String(value) : undefined
         }
 
-        // Парсим и валидируем данные
+        const rawData = {
+            name: getValue('name'),
+            description: getValue('description'),
+            fullDescription: getValue('fullDescription'),
+            pricePerDay: getValue('pricePerDay'),
+            pricePerWeek: getValue('pricePerWeek'),
+            pricePerMonth: getValue('pricePerMonth'),
+            categoryId: getValue('categoryId'),
+            quantity: getValue('quantity'),
+            brand: getValue('brand'),
+            model: getValue('model'),
+            weight: getValue('weight'),
+            dimensions: getValue('dimensions'),
+            powerRequirements: getValue('powerRequirements'),
+            available: formData.get('available') === 'true',
+            featured: formData.get('featured') === 'true',
+            mainImage: getValue('mainImage'),
+            serialNumber: getValue('sku'),
+        }
+
+        // Валидация
+        const equipmentSchema = z.object({
+            name: z.string().min(2, 'Название слишком короткое'),
+            description: z.string().min(5, 'Описание слишком короткое'),
+            fullDescription: z.string().optional(),
+            pricePerDay: z.number().positive('Цена должна быть положительной'),
+            pricePerWeek: z.number().positive().optional(),
+            pricePerMonth: z.number().positive().optional(),
+            categoryId: z.string().min(1, 'Выберите категорию'),
+            quantity: z.number().int().min(1, 'Количество должно быть не менее 1'),
+            brand: z.string().optional(),
+            model: z.string().optional(),
+            weight: z.number().optional(),
+            dimensions: z.string().optional(),
+            powerRequirements: z.string().optional(),
+            available: z.boolean().default(true),
+            featured: z.boolean().default(false),
+            mainImage: z.string().optional(),
+            serialNumber: z.string().optional(),
+        })
+
         const validatedData = equipmentSchema.parse({
             ...rawData,
-            pricePerDay: Number(rawData.pricePerDay),
-            quantity: Number(rawData.quantity),
+            pricePerDay: rawData.pricePerDay ? Number(rawData.pricePerDay) : undefined,
+            pricePerWeek: rawData.pricePerWeek ? Number(rawData.pricePerWeek) : undefined,
+            pricePerMonth: rawData.pricePerMonth ? Number(rawData.pricePerMonth) : undefined,
+            quantity: rawData.quantity ? Number(rawData.quantity) : undefined,
+            weight: rawData.weight ? Number(rawData.weight) : undefined,
         })
 
         const equipment = await prisma.equipment.create({
@@ -212,12 +291,18 @@ export async function createEquipment(
     } catch (error) {
         console.error('Create equipment error:', error)
 
-        if (error instanceof z.ZodError) {
-            // Используем any для временного обхода
-            const zodError = error as any
+        // Проверяем, является ли ошибка ZodError
+        if (error && typeof error === 'object' && 'errors' in error) {
+            const zodError = error as { errors: Array<{ message: string }> }
+            console.log('❌ Zod ошибка:', zodError.errors)
+
+            const errorMessage = zodError.errors && zodError.errors.length > 0
+                ? zodError.errors[0].message
+                : 'Ошибка валидации данных'
+
             return {
                 success: false,
-                error: zodError.errors?.[0]?.message || 'Ошибка валидации'
+                error: errorMessage
             }
         }
 

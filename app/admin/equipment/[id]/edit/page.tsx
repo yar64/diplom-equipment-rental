@@ -1,26 +1,32 @@
-// app/admin/equipment/create/page.tsx
+// app/admin/equipment/[id]/edit/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
     ArrowLeft,
     Package,
     Save,
+    Upload,
+    Trash2,
     AlertCircle,
-    CheckCircle
+    CheckCircle,
+    XCircle
 } from 'lucide-react'
-import { createEquipment } from '@/server/actions/equipment.actions'
+import { getEquipmentById, updateEquipment } from '@/server/actions/equipment.actions'
 import { getCategories } from '@/server/actions/category.actions'
-import { Category } from '@/shared/types'
-import Button from '../../../components/ui/Button'
-import Input from '../../../components/ui/Input'
+import { Equipment, Category } from '@/shared/types'
+import Button from '../../../../components/ui/Button'
+import Input from '../../../../components/ui/Input'
 
-export default function CreateEquipmentPage() {
+export default function EditEquipmentPage() {
+    const params = useParams()
     const router = useRouter()
-    const [loading, setLoading] = useState(false)
-    const [loadingCategories, setLoadingCategories] = useState(true)
+    const equipmentId = params.id as string
+
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState('')
     const [categories, setCategories] = useState<Category[]>([])
@@ -43,26 +49,60 @@ export default function CreateEquipmentPage() {
         available: true,
         featured: false,
         mainImage: '',
+        images: [] as string[],
     })
 
-    // Загрузка категорий
+    // Загрузка данных оборудования и категорий
     useEffect(() => {
-        const loadCategories = async () => {
-            setLoadingCategories(true)
+        const loadData = async () => {
+            setLoading(true)
             try {
-                const result = await getCategories()
-                if (result.success) {
-                    setCategories((result.data as Category[]) || [])
+                const [equipmentRes, categoriesRes] = await Promise.all([
+                    getEquipmentById(equipmentId),
+                    getCategories()
+                ])
+
+                if (categoriesRes.success) {
+                    setCategories((categoriesRes.data as Category[]) || [])
+                }
+
+                if (equipmentRes.success && equipmentRes.data) {
+                    const eq = equipmentRes.data as Equipment
+                    setFormData({
+                        name: eq.name || '',
+                        categoryId: eq.categoryId || '',
+                        description: eq.description || '',
+                        fullDescription: eq.fullDescription || '',
+                        pricePerDay: eq.pricePerDay?.toString() || '',
+                        pricePerWeek: eq.pricePerWeek?.toString() || '',
+                        pricePerMonth: eq.pricePerMonth?.toString() || '',
+                        quantity: eq.quantity?.toString() || '1',
+                        sku: eq.serialNumber || '',
+                        brand: eq.brand || '',
+                        model: eq.model || '',
+                        weight: eq.weight?.toString() || '',
+                        dimensions: eq.dimensions || '',
+                        powerRequirements: eq.powerRequirements || '',
+                        available: eq.available ?? true,
+                        featured: eq.featured ?? false,
+                        mainImage: eq.mainImage || '',
+                        images: eq.images ? JSON.parse(eq.images) : [],
+                    })
+                } else {
+                    setError('Оборудование не найдено')
                 }
             } catch (error) {
-                console.error('Error loading categories:', error)
+                console.error('Error loading equipment:', error)
+                setError('Ошибка при загрузке данных')
             } finally {
-                setLoadingCategories(false)
+                setLoading(false)
             }
         }
 
-        loadCategories()
-    }, [])
+        if (equipmentId) {
+            loadData()
+        }
+    }, [equipmentId])
 
     // Обработка изменений в форме
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -78,50 +118,22 @@ export default function CreateEquipmentPage() {
         setFormData(prev => ({ ...prev, [name]: checked }))
     }
 
-    // Валидация формы
-    const validateForm = () => {
-        if (!formData.name.trim()) {
-            setError('Введите название оборудования')
-            return false
-        }
-        if (!formData.categoryId) {
-            setError('Выберите категорию')
-            return false
-        }
-        if (!formData.description.trim()) {
-            setError('Введите краткое описание')
-            return false
-        }
-        if (!formData.pricePerDay || Number(formData.pricePerDay) <= 0) {
-            setError('Введите корректную цену за день')
-            return false
-        }
-        if (!formData.quantity || Number(formData.quantity) < 1) {
-            setError('Количество должно быть не менее 1')
-            return false
-        }
-        return true
-    }
-
     // Отправка формы
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
         setSuccess('')
-
-        if (!validateForm()) {
-            return
-        }
-
-        setLoading(true)
+        setSaving(true)
 
         try {
             const formDataToSend = new FormData()
 
             // Добавляем все поля в FormData
             Object.entries(formData).forEach(([key, value]) => {
-                if (value !== undefined && value !== null && value !== '') {
-                    if (typeof value === 'boolean') {
+                if (value !== undefined && value !== null) {
+                    if (key === 'images') {
+                        formDataToSend.append(key, JSON.stringify(value))
+                    } else if (typeof value === 'boolean') {
                         formDataToSend.append(key, String(value))
                     } else {
                         formDataToSend.append(key, String(value))
@@ -129,47 +141,55 @@ export default function CreateEquipmentPage() {
                 }
             })
 
-            // Для images отправляем пустой массив
-            formDataToSend.append('images', '[]')
-
-            const result = await createEquipment(formDataToSend)
+            const result = await updateEquipment(equipmentId, formDataToSend)
 
             if (result.success) {
-                setSuccess('Оборудование успешно создано!')
-                // Очищаем форму
-                setFormData({
-                    name: '',
-                    categoryId: '',
-                    description: '',
-                    fullDescription: '',
-                    pricePerDay: '',
-                    pricePerWeek: '',
-                    pricePerMonth: '',
-                    quantity: '1',
-                    sku: '',
-                    brand: '',
-                    model: '',
-                    weight: '',
-                    dimensions: '',
-                    powerRequirements: '',
-                    available: true,
-                    featured: false,
-                    mainImage: '',
-                })
-
-                // Через 2 секунды переходим к списку
+                setSuccess('Оборудование успешно обновлено!')
                 setTimeout(() => {
                     router.push('/admin/equipment')
                 }, 2000)
             } else {
-                setError(result.error || 'Ошибка при создании оборудования')
+                setError(result.error || 'Ошибка при обновлении')
             }
         } catch (error) {
-            console.error('Create error:', error)
-            setError('Произошла ошибка при создании оборудования')
+            console.error('Update error:', error)
+            setError('Произошла ошибка при обновлении')
         } finally {
-            setLoading(false)
+            setSaving(false)
         }
+    }
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Загрузка оборудования...</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (error && !formData.name) {
+        return (
+            <div className="max-w-4xl mx-auto space-y-6">
+                <Link
+                    href="/admin/equipment"
+                    className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    Назад к списку оборудования
+                </Link>
+                <div className="border border-border rounded-lg bg-background p-8 text-center">
+                    <AlertCircle className="w-12 h-12 mx-auto mb-4 text-destructive" />
+                    <h2 className="text-xl font-semibold mb-2">Оборудование не найдено</h2>
+                    <p className="text-muted-foreground mb-4">Возможно, оно было удалено или никогда не существовало</p>
+                    <Link href="/admin/equipment">
+                        <Button>Вернуться к списку</Button>
+                    </Link>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -183,9 +203,9 @@ export default function CreateEquipmentPage() {
                     <ArrowLeft className="w-4 h-4" />
                     Назад к списку оборудования
                 </Link>
-                <h1 className="text-2xl font-bold tracking-tight">Добавить новое оборудование</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Редактирование оборудования</h1>
                 <p className="text-muted-foreground mt-1">
-                    Заполните информацию о новом оборудовании для аренды
+                    Изменение информации о &quot;{formData.name}&quot;
                 </p>
             </div>
 
@@ -214,9 +234,7 @@ export default function CreateEquipmentPage() {
                     <h2 className="text-lg font-semibold mb-4">Основная информация</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                                Название оборудования <span className="text-destructive">*</span>
-                            </label>
+                            <label className="text-sm font-medium">Название оборудования *</label>
                             <Input
                                 name="name"
                                 value={formData.name}
@@ -226,25 +244,19 @@ export default function CreateEquipmentPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                                Категория <span className="text-destructive">*</span>
-                            </label>
-                            {loadingCategories ? (
-                                <div className="h-10 bg-muted animate-pulse rounded-lg" />
-                            ) : (
-                                <select
-                                    name="categoryId"
-                                    value={formData.categoryId}
-                                    onChange={handleChange}
-                                    className="w-full border border-input rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-background"
-                                    required
-                                >
-                                    <option value="">Выберите категорию</option>
-                                    {categories.map(cat => (
-                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                    ))}
-                                </select>
-                            )}
+                            <label className="text-sm font-medium">Категория *</label>
+                            <select
+                                name="categoryId"
+                                value={formData.categoryId}
+                                onChange={handleChange}
+                                className="w-full border border-input rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                                required
+                            >
+                                <option value="">Выберите категорию</option>
+                                {categories.map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Артикул (SKU)</label>
@@ -256,9 +268,7 @@ export default function CreateEquipmentPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                                Количество <span className="text-destructive">*</span>
-                            </label>
+                            <label className="text-sm font-medium">Количество *</label>
                             <Input
                                 type="number"
                                 name="quantity"
@@ -271,15 +281,13 @@ export default function CreateEquipmentPage() {
                     </div>
 
                     <div className="mt-4 space-y-2">
-                        <label className="text-sm font-medium">
-                            Краткое описание <span className="text-destructive">*</span>
-                        </label>
+                        <label className="text-sm font-medium">Краткое описание *</label>
                         <textarea
                             name="description"
                             value={formData.description}
                             onChange={handleChange}
                             className="w-full border border-input rounded-lg px-3 py-2 min-h-[80px] focus:outline-none focus:ring-2 focus:ring-ring bg-background"
-                            placeholder="Краткое описание для карточки товара (отображается в каталоге)"
+                            placeholder="Краткое описание для карточки товара"
                             required
                         />
                     </div>
@@ -291,7 +299,7 @@ export default function CreateEquipmentPage() {
                             value={formData.fullDescription}
                             onChange={handleChange}
                             className="w-full border border-input rounded-lg px-3 py-2 min-h-[150px] focus:outline-none focus:ring-2 focus:ring-ring bg-background"
-                            placeholder="Подробное описание, характеристики, особенности (отображается на странице товара)"
+                            placeholder="Подробное описание, характеристики, особенности..."
                         />
                     </div>
                 </div>
@@ -301,17 +309,13 @@ export default function CreateEquipmentPage() {
                     <h2 className="text-lg font-semibold mb-4">Цены</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                                Цена за день (₽) <span className="text-destructive">*</span>
-                            </label>
+                            <label className="text-sm font-medium">Цена за день (₽) *</label>
                             <Input
                                 type="number"
                                 name="pricePerDay"
                                 value={formData.pricePerDay}
                                 onChange={handleChange}
                                 placeholder="1500"
-                                min="0"
-                                step="1"
                                 required
                             />
                         </div>
@@ -323,10 +327,7 @@ export default function CreateEquipmentPage() {
                                 value={formData.pricePerWeek}
                                 onChange={handleChange}
                                 placeholder="9000"
-                                min="0"
-                                step="1"
                             />
-                            <p className="text-xs text-muted-foreground">Скидка за неделю</p>
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Цена за месяц (₽)</label>
@@ -336,10 +337,7 @@ export default function CreateEquipmentPage() {
                                 value={formData.pricePerMonth}
                                 onChange={handleChange}
                                 placeholder="30000"
-                                min="0"
-                                step="1"
                             />
-                            <p className="text-xs text-muted-foreground">Скидка за месяц</p>
                         </div>
                     </div>
                 </div>
@@ -487,12 +485,12 @@ export default function CreateEquipmentPage() {
                         <Button
                             type="submit"
                             variant="primary"
-                            loading={loading}
-                            disabled={loading}
+                            loading={saving}
+                            disabled={saving}
                             className="gap-2"
                         >
-                            <Package className="w-4 h-4" />
-                            Создать оборудование
+                            <Save className="w-4 h-4" />
+                            Сохранить изменения
                         </Button>
                     </div>
                 </div>

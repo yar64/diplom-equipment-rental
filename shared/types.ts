@@ -240,3 +240,19 @@ export interface TableColumn<T> {
     sortable?: boolean
     render?: (value: any, item: T) => React.ReactNode
 }
+
+// Расширение типа для ответов от экшенов
+export interface ActionResponse<T = any> {
+    success: boolean
+    data?: T
+    error?: string
+    message?: string
+}
+
+// Тип для категории с оборудованием
+export interface CategoryWithStats extends Category {
+    _count?: {
+        equipment: number
+        children: number
+    }
+}

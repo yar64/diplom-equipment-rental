@@ -2,8 +2,10 @@
 'use server'
 
 import prisma from '../utils/prisma'
+import { ActionResponse } from '@/shared/types'
+import { Category } from '@prisma/client'
 
-export async function getCategories() {
+export async function getCategories(): Promise<ActionResponse<Category[]>> {
     try {
         const categories = await prisma.category.findMany({
             orderBy: {
