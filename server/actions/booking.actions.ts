@@ -4,6 +4,7 @@
 import prisma from '../utils/prisma'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { BookingStatus, PaymentStatus, ActionResponse } from '@/shared/types'
 
 // Валидация схемы бронирования
 const bookingSchema = z.object({
@@ -17,33 +18,85 @@ const bookingSchema = z.object({
     notes: z.string().optional(),
 })
 
-// Типы
+// Типы для фильтров
 interface BookingFilters {
     userId?: string
-    status?: string
+    status?: BookingStatus | string
     startDate?: Date
     endDate?: Date
 }
 
+// Тип для ответа с пагинацией
+interface PaginatedResponse<T> {
+    items: T[]
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+}
+
 // Создание бронирования
-export async function createBooking(formData: FormData, userId: string) {
+export async function createBooking(formData: FormData, userId: string): Promise<ActionResponse> {
     try {
-        const validatedData = bookingSchema.parse({
-            equipmentId: formData.get('equipmentId'),
-            startDate: formData.get('startDate'),
-            endDate: formData.get('endDate'),
-            eventType: formData.get('eventType'),
-            eventAddress: formData.get('eventAddress'),
-            eventDate: formData.get('eventDate'),
-            attendeesCount: formData.get('attendeesCount')
-                ? Number(formData.get('attendeesCount'))
-                : undefined,
-            notes: formData.get('notes'),
-        })
+        // Функция для безопасного получения значения из FormData
+        const getField = (key: string): string | undefined => {
+            const value = formData.get(key)
+            return value === null ? undefined : value.toString()
+        }
+
+        const equipmentId = getField('equipmentId')
+        const startDateStr = getField('startDate')
+        const endDateStr = getField('endDate')
+        const eventType = getField('eventType')
+        const eventAddress = getField('eventAddress')
+        const eventDateStr = getField('eventDate')
+        const attendeesCountStr = getField('attendeesCount')
+        const notes = getField('notes')
+        const paymentMethod = getField('paymentMethod') // Получаем метод оплаты
+
+        // Валидация обязательных полей
+        if (!equipmentId) {
+            return { success: false, error: 'Выберите оборудование' }
+        }
+
+        if (!startDateStr) {
+            return { success: false, error: 'Укажите дату начала' }
+        }
+
+        if (!endDateStr) {
+            return { success: false, error: 'Укажите дату окончания' }
+        }
+
+        // Преобразуем строки в Date
+        const startDate = new Date(startDateStr)
+        const endDate = new Date(endDateStr)
+        const eventDate = eventDateStr ? new Date(eventDateStr) : undefined
+
+        // Проверяем корректность дат
+        if (isNaN(startDate.getTime())) {
+            return { success: false, error: 'Некорректная дата начала' }
+        }
+
+        if (isNaN(endDate.getTime())) {
+            return { success: false, error: 'Некорректная дата окончания' }
+        }
+
+        if (endDate <= startDate) {
+            return { success: false, error: 'Дата окончания должна быть позже даты начала' }
+        }
+
+        // Преобразуем количество участников
+        let attendeesCount: number | undefined = undefined
+        if (attendeesCountStr && attendeesCountStr.trim() !== '') {
+            const parsed = parseInt(attendeesCountStr)
+            if (!isNaN(parsed) && parsed > 0) {
+                attendeesCount = parsed
+            }
+        }
 
         // Проверяем доступность оборудования
         const equipment = await prisma.equipment.findUnique({
-            where: { id: validatedData.equipmentId },
+            where: { id: equipmentId },
         })
 
         if (!equipment) {
@@ -57,12 +110,12 @@ export async function createBooking(formData: FormData, userId: string) {
         // Проверяем пересечение дат
         const conflictingBookings = await prisma.booking.findMany({
             where: {
-                equipmentId: validatedData.equipmentId,
+                equipmentId,
                 status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] },
                 OR: [
                     {
-                        startDate: { lte: validatedData.endDate },
-                        endDate: { gte: validatedData.startDate },
+                        startDate: { lte: endDate },
+                        endDate: { gte: startDate },
                     },
                 ],
             },
@@ -74,8 +127,7 @@ export async function createBooking(formData: FormData, userId: string) {
 
         // Рассчитываем стоимость
         const totalDays = Math.ceil(
-            (validatedData.endDate.getTime() - validatedData.startDate.getTime()) /
-            (1000 * 60 * 60 * 24)
+            (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
         )
 
         const totalPrice = totalDays * equipment.pricePerDay
@@ -83,12 +135,18 @@ export async function createBooking(formData: FormData, userId: string) {
         // Создаем бронирование
         const booking = await prisma.booking.create({
             data: {
-                ...validatedData,
+                equipmentId,
                 userId,
+                startDate,
+                endDate,
                 totalDays,
                 totalPrice,
+                eventType,
+                eventAddress,
+                eventDate,
+                attendeesCount,
+                notes,
                 status: 'PENDING',
-                paymentStatus: 'PENDING',
             },
             include: {
                 equipment: {
@@ -107,6 +165,17 @@ export async function createBooking(formData: FormData, userId: string) {
             },
         })
 
+        // ✅ СОЗДАЕМ ПЛАТЕЖ
+        await prisma.payment.create({
+            data: {
+                bookingId: booking.id,
+                amount: totalPrice,
+                status: 'PENDING',
+                method: paymentMethod || null,
+            }
+        })
+
+        revalidatePath('/admin/bookings')
         revalidatePath('/bookings')
         revalidatePath('/profile')
 
@@ -118,10 +187,6 @@ export async function createBooking(formData: FormData, userId: string) {
     } catch (error: unknown) {
         console.error('Create booking error:', error)
 
-        if (error instanceof z.ZodError) {
-            return { success: false, error: error.errors[0]?.message || 'Ошибка валидации' }
-        }
-
         if (error instanceof Error) {
             return { success: false, error: error.message }
         }
@@ -131,12 +196,12 @@ export async function createBooking(formData: FormData, userId: string) {
 }
 
 // Получение бронирований пользователя
-export async function getUserBookings(userId: string, filters?: BookingFilters) {
+export async function getUserBookings(userId: string, filters?: BookingFilters): Promise<ActionResponse> {
     try {
         const bookings = await prisma.booking.findMany({
             where: {
                 userId,
-                ...(filters?.status && { status: filters.status }),
+                ...(filters?.status && { status: filters.status as BookingStatus }),
                 ...(filters?.startDate && { startDate: { gte: filters.startDate } }),
                 ...(filters?.endDate && { endDate: { lte: filters.endDate } }),
             },
@@ -146,6 +211,7 @@ export async function getUserBookings(userId: string, filters?: BookingFilters) 
                         category: true,
                     },
                 },
+                payment: true, // ✅ Включаем платеж
             },
             orderBy: {
                 createdAt: 'desc',
@@ -165,7 +231,7 @@ export async function getUserBookings(userId: string, filters?: BookingFilters) 
 }
 
 // Получение бронирования по ID
-export async function getBookingById(id: string, userId?: string) {
+export async function getBookingById(id: string, userId?: string): Promise<ActionResponse> {
     try {
         const whereClause: any = { id }
 
@@ -190,6 +256,7 @@ export async function getBookingById(id: string, userId?: string) {
                         phone: true,
                     },
                 },
+                payment: true, // ✅ Включаем платеж
             },
         })
 
@@ -210,7 +277,7 @@ export async function getBookingById(id: string, userId?: string) {
 }
 
 // Обновление статуса бронирования (для админа)
-export async function updateBookingStatus(id: string, status: string, adminId: string) {
+export async function updateBookingStatus(id: string, status: string, adminId: string): Promise<ActionResponse> {
     try {
         // Проверяем что пользователь - админ
         const admin = await prisma.user.findUnique({
@@ -223,7 +290,7 @@ export async function updateBookingStatus(id: string, status: string, adminId: s
 
         const booking = await prisma.booking.update({
             where: { id },
-            data: { status },
+            data: { status: status as BookingStatus },
             include: {
                 equipment: true,
                 user: {
@@ -233,8 +300,46 @@ export async function updateBookingStatus(id: string, status: string, adminId: s
                         email: true,
                     },
                 },
+                payment: true, // ✅ Включаем платеж
             },
         })
+
+        // ✅ ЕСЛИ СТАТУС ПОДТВЕРЖДЕН, ПРОВЕРЯЕМ ПЛАТЕЖ
+        if (status === 'CONFIRMED' || status === 'ACTIVE') {
+            const existingPayment = await prisma.payment.findUnique({
+                where: { bookingId: id }
+            })
+
+            if (!existingPayment) {
+                await prisma.payment.create({
+                    data: {
+                        bookingId: id,
+                        amount: booking.totalPrice,
+                        status: 'PENDING',
+                        method: 'pending',
+                    }
+                })
+            }
+        }
+
+        // ✅ ЕСЛИ БРОНИРОВАНИЕ ЗАВЕРШЕНО, ПРОВЕРЯЕМ СТАТУС ПЛАТЕЖА
+        if (status === 'COMPLETED') {
+            const payment = await prisma.payment.findUnique({
+                where: { bookingId: id }
+            })
+
+            // Если платеж все еще в статусе PENDING, меняем на PAID (оплачено при получении)
+            if (payment && payment.status === 'PENDING') {
+                await prisma.payment.update({
+                    where: { id: payment.id },
+                    data: {
+                        status: 'PAID',
+                        paidAt: new Date(),
+                        confirmedById: adminId,
+                    }
+                })
+            }
+        }
 
         // Создаем уведомление для пользователя
         await prisma.notification.create({
@@ -250,6 +355,7 @@ export async function updateBookingStatus(id: string, status: string, adminId: s
         revalidatePath('/admin/bookings')
         revalidatePath(`/bookings/${id}`)
         revalidatePath('/profile')
+        revalidatePath('/admin/payments') // ✅ Обновляем страницу платежей
 
         return {
             success: true,
@@ -268,7 +374,7 @@ export async function updateBookingStatus(id: string, status: string, adminId: s
 }
 
 // Отмена бронирования
-export async function cancelBooking(id: string, userId: string) {
+export async function cancelBooking(id: string, userId: string): Promise<ActionResponse> {
     try {
         const booking = await prisma.booking.findUnique({
             where: { id },
@@ -295,8 +401,15 @@ export async function cancelBooking(id: string, userId: string) {
             data: { status: 'CANCELLED' },
         })
 
+        // ✅ Отменяем платеж, если он был
+        await prisma.payment.updateMany({
+            where: { bookingId: id, status: 'PENDING' },
+            data: { status: 'FAILED' }
+        })
+
         revalidatePath('/bookings')
         revalidatePath('/profile')
+        revalidatePath('/admin/payments')
 
         return {
             success: true,
@@ -322,8 +435,14 @@ export async function getAllBookings(filters?: {
     endDate?: Date
     userId?: string
     equipmentId?: string
-}): Promise<ActionResponse> {
+    page?: number
+    limit?: number
+}): Promise<ActionResponse<PaginatedResponse<any>>> {
     try {
+        const page = filters?.page || 1
+        const limit = filters?.limit || 25
+        const skip = (page - 1) * limit
+
         const where: any = {}
 
         if (filters?.status) {
@@ -366,6 +485,8 @@ export async function getAllBookings(filters?: {
             where.endDate = { lte: filters.endDate }
         }
 
+        const total = await prisma.booking.count({ where })
+
         const bookings = await prisma.booking.findMany({
             where,
             include: {
@@ -389,13 +510,27 @@ export async function getAllBookings(filters?: {
                         },
                     },
                 },
+                payment: true, // ✅ Включаем платеж
             },
             orderBy: {
                 createdAt: 'desc',
             },
+            skip,
+            take: limit,
         })
 
-        return { success: true, data: bookings }
+        const totalPages = Math.ceil(total / limit)
+
+        return {
+            success: true,
+            data: {
+                items: bookings,
+                total,
+                page,
+                limit,
+                totalPages
+            }
+        }
     } catch (error: any) {
         console.error('Get all bookings error:', error)
         return {
@@ -408,11 +543,18 @@ export async function getAllBookings(filters?: {
 // Удаление бронирования (для админа)
 export async function deleteBooking(id: string): Promise<ActionResponse> {
     try {
+        // Сначала удаляем связанный платеж (он удалится каскадно, но для порядка)
+        await prisma.payment.deleteMany({
+            where: { bookingId: id }
+        })
+
         await prisma.booking.delete({
             where: { id },
         })
 
         revalidatePath('/admin/bookings')
+        revalidatePath('/admin/payments')
+
         return {
             success: true,
             message: 'Бронирование удалено'
@@ -438,12 +580,9 @@ export async function getBookingStats(): Promise<ActionResponse> {
         })
         const completedBookings = await prisma.booking.count({ where: { status: 'COMPLETED' } })
 
-        const totalRevenue = await prisma.booking.aggregate({
-            _sum: { totalPrice: true },
-            where: {
-                status: { in: ['COMPLETED', 'ACTIVE'] },
-                paymentStatus: 'PAID'
-            }
+        const totalRevenue = await prisma.payment.aggregate({
+            _sum: { amount: true },
+            where: { status: 'PAID' }
         })
 
         const recentBookings = await prisma.booking.findMany({
@@ -451,6 +590,7 @@ export async function getBookingStats(): Promise<ActionResponse> {
             include: {
                 user: { select: { name: true } },
                 equipment: { select: { name: true } },
+                payment: true,
             },
             orderBy: { createdAt: 'desc' }
         })
@@ -462,7 +602,7 @@ export async function getBookingStats(): Promise<ActionResponse> {
                 pendingBookings,
                 activeBookings,
                 completedBookings,
-                totalRevenue: totalRevenue._sum.totalPrice || 0,
+                totalRevenue: totalRevenue._sum.amount || 0,
                 recentBookings
             }
         }
@@ -475,10 +615,84 @@ export async function getBookingStats(): Promise<ActionResponse> {
     }
 }
 
-// Тип для ActionResponse (добавим в начало файла)
-interface ActionResponse<T = any> {
-    success: boolean
-    data?: T
-    error?: string
-    message?: string
+// Массовое обновление статусов
+export async function updateBookingStatusBatch(
+    bookingIds: string[],
+    status: string,
+    adminId: string
+): Promise<ActionResponse> {
+    try {
+        // Проверяем что пользователь - админ
+        const admin = await prisma.user.findUnique({
+            where: { id: adminId, role: { in: ['ADMIN', 'MANAGER'] } },
+        })
+
+        if (!admin) {
+            return { success: false, error: 'Недостаточно прав' }
+        }
+
+        const result = await prisma.booking.updateMany({
+            where: { id: { in: bookingIds } },
+            data: { status: status as BookingStatus },
+        })
+
+        // Обновляем платежи для подтвержденных бронирований
+        if (status === 'CONFIRMED' || status === 'ACTIVE') {
+            const bookings = await prisma.booking.findMany({
+                where: { id: { in: bookingIds } },
+                select: { id: true, totalPrice: true }
+            })
+
+            for (const booking of bookings) {
+                const existingPayment = await prisma.payment.findUnique({
+                    where: { bookingId: booking.id }
+                })
+
+                if (!existingPayment) {
+                    await prisma.payment.create({
+                        data: {
+                            bookingId: booking.id,
+                            amount: booking.totalPrice,
+                            status: 'PENDING',
+                        }
+                    })
+                }
+            }
+        }
+
+        // Создаем уведомления для каждого пользователя
+        const bookings = await prisma.booking.findMany({
+            where: { id: { in: bookingIds } },
+            include: {
+                user: { select: { id: true } },
+                equipment: { select: { name: true } },
+            },
+        })
+
+        for (const booking of bookings) {
+            await prisma.notification.create({
+                data: {
+                    userId: booking.user.id,
+                    type: 'BOOKING_UPDATE',
+                    title: `Статус заказа изменен`,
+                    message: `Статус вашего заказа на "${booking.equipment.name}" изменен на "${status}"`,
+                    link: `/bookings/${booking.id}`,
+                },
+            })
+        }
+
+        revalidatePath('/admin/bookings')
+        revalidatePath('/admin/payments')
+
+        return {
+            success: true,
+            message: `Обновлено ${result.count} бронирований`
+        }
+    } catch (error: any) {
+        console.error('Batch update booking status error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Не удалось обновить статусы'
+        }
+    }
 }

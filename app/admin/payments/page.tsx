@@ -1,15 +1,19 @@
-// app/admin/payments/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
 import {
     DollarSign, CheckCircle, Clock, XCircle, Filter,
     Download, RefreshCw, Eye, CreditCard, TrendingUp,
-    AlertCircle, Users, Package, Calendar
+    AlertCircle, Users, Package, Calendar, ChevronLeft,
+    ChevronRight, RotateCcw, X, FileText, User, Phone,
+    Mail, Calendar as CalendarIcon
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { formatDate, formatPrice } from '@/shared/utils'
-import { getAllBookings } from '@/server/actions/booking.actions'
+import { getPayments, getPaymentStats, updatePaymentStatus, getPaymentById } from '@/server/actions/payment.actions'
+import { useUser } from '@/hooks/useUser'
+import Button from '../../components/ui/Button'
 
 // Типы
 interface Payment {
@@ -18,7 +22,8 @@ interface Payment {
     amount: number
     status: string
     method?: string
-    paymentDate?: string
+    transactionId?: string
+    paidAt?: string
     createdAt: string
     booking: {
         id: string
@@ -28,125 +33,374 @@ interface Payment {
         user: {
             name?: string
             email: string
+            phone?: string
         }
         totalPrice: number
+        startDate: string
+        endDate: string
+    }
+    confirmedBy?: {
+        name: string
     }
 }
 
-// Моковые данные для платежей (в реальном приложении будет отдельная таблица)
-const mockPayments: Payment[] = [
-    {
-        id: 'PAY-001',
-        bookingId: 'BK-001',
-        amount: 13500,
-        status: 'PAID',
-        method: 'Карта',
-        paymentDate: '2024-12-01T10:30:00Z',
-        createdAt: '2024-12-01T10:30:00Z',
-        booking: {
-            id: 'BK-001',
-            equipment: { name: 'Микшер Yamaha CL5' },
-            user: { name: 'Иван Иванов', email: 'ivan@example.com' },
-            totalPrice: 13500
-        }
-    },
-    {
-        id: 'PAY-002',
-        bookingId: 'BK-002',
-        amount: 36000,
-        status: 'PENDING',
-        method: 'Наличные',
-        createdAt: '2024-11-30T14:20:00Z',
-        booking: {
-            id: 'BK-002',
-            equipment: { name: 'Samsung 55" QLED' },
-            user: { name: 'Мария Петрова', email: 'maria@example.com' },
-            totalPrice: 36000
-        }
-    },
-    {
-        id: 'PAY-003',
-        bookingId: 'BK-003',
-        amount: 10500,
-        status: 'FAILED',
-        method: 'Карта',
-        createdAt: '2024-11-28T09:15:00Z',
-        booking: {
-            id: 'BK-003',
-            equipment: { name: 'Проектор Epson EB-U50' },
-            user: { name: 'Алексей Сидоров', email: 'alex@example.com' },
-            totalPrice: 10500
-        }
-    },
-    {
-        id: 'PAY-004',
-        bookingId: 'BK-004',
-        amount: 22500,
-        status: 'PAID',
-        method: 'Перевод',
-        paymentDate: '2024-11-27T16:45:00Z',
-        createdAt: '2024-11-27T16:45:00Z',
-        booking: {
-            id: 'BK-004',
-            equipment: { name: 'Акустическая система JBL' },
-            user: { name: 'Ольга Козлова', email: 'olga@example.com' },
-            totalPrice: 22500
-        }
-    },
-    {
-        id: 'PAY-005',
-        bookingId: 'BK-005',
-        amount: 18000,
-        status: 'PENDING',
-        method: 'Карта',
-        createdAt: '2024-11-26T11:20:00Z',
-        booking: {
-            id: 'BK-005',
-            equipment: { name: 'Светодиодный экван P3' },
-            user: { email: 'client@example.com' },
-            totalPrice: 18000
-        }
-    }
-]
+interface PaymentStats {
+    total: number
+    paid: number
+    pending: number
+    failed: number
+    refunded: number
+    count: number
+    paidCount: number
+    pendingCount: number
+    failedCount: number
+}
 
-export default function PaymentsPage() {
-    const [loading, setLoading] = useState(true)
-    const [payments, setPayments] = useState<Payment[]>([])
-    const [filter, setFilter] = useState<'all' | 'paid' | 'pending' | 'failed'>('all')
-    const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month')
+// Компонент статуса
+const StatusBadge = ({ status }: { status: string }) => {
+    const statusConfig: Record<string, { color: string; text: string; bg: string }> = {
+        PAID: { color: 'text-green-600', bg: 'bg-green-100', text: 'Оплачен' },
+        PENDING: { color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Ожидает' },
+        PROCESSING: { color: 'text-blue-600', bg: 'bg-blue-100', text: 'Обрабатывается' },
+        FAILED: { color: 'text-red-600', bg: 'bg-red-100', text: 'Ошибка' },
+        REFUNDED: { color: 'text-purple-600', bg: 'bg-purple-100', text: 'Возврат' },
+        PARTIAL: { color: 'text-orange-600', bg: 'bg-orange-100', text: 'Частично' },
+    }
+
+    const config = statusConfig[status] || { color: 'text-gray-600', bg: 'bg-gray-100', text: status }
+
+    return (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
+            {config.text}
+        </span>
+    )
+}
+
+// Модальное окно просмотра платежа
+const PaymentPreviewModal = ({
+    paymentId,
+    isOpen,
+    onClose
+}: {
+    paymentId: string | null
+    isOpen: boolean
+    onClose: () => void
+}) => {
+    const [payment, setPayment] = useState<Payment | null>(null)
+    const [loading, setLoading] = useState(false)
 
     useEffect(() => {
-        loadPayments()
-    }, [filter, timeRange])
+        if (paymentId && isOpen) {
+            loadPayment(paymentId)
+        }
+    }, [paymentId, isOpen])
 
-    const loadPayments = async () => {
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose()
+        }
+        if (isOpen) {
+            window.addEventListener('keydown', handleEsc)
+        }
+        return () => window.removeEventListener('keydown', handleEsc)
+    }, [isOpen, onClose])
+
+    const loadPayment = async (id: string) => {
         setLoading(true)
         try {
-            // В реальном приложении здесь будет запрос к API платежей
-            // Пока используем моковые данные с фильтрацией
-
-            let filteredPayments = [...mockPayments]
-
-            if (filter !== 'all') {
-                filteredPayments = filteredPayments.filter(p => p.status === filter.toUpperCase())
+            const result = await getPaymentById(id)
+            if (result.success && result.data) {
+                setPayment(result.data as Payment)
             }
+        } catch (error) {
+            console.error('Error loading payment:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
 
-            // Фильтрация по времени
+    if (!isOpen) return null
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
+            <div className="relative bg-background rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Заголовок */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                        <DollarSign className="w-5 h-5 text-primary" />
+                        Детали платежа
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-accent rounded-lg transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Контент */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className="animate-pulse text-center">
+                                <RotateCcw className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+                                <p className="text-muted-foreground">Загрузка данных...</p>
+                            </div>
+                        </div>
+                    ) : !payment ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                            Платеж не найден
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            {/* Статус и ID */}
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="text-sm text-muted-foreground">ID платежа</div>
+                                    <div className="font-mono text-sm">#{payment.id.slice(0, 8)}</div>
+                                </div>
+                                <StatusBadge status={payment.status} />
+                            </div>
+
+                            {/* Сумма */}
+                            <div className="bg-primary/5 p-6 rounded-lg text-center">
+                                <div className="text-sm text-muted-foreground mb-1">Сумма платежа</div>
+                                <div className="text-4xl font-bold text-primary">
+                                    {formatPrice(payment.amount)}
+                                </div>
+                            </div>
+
+                            {/* Информация о платеже */}
+                            <div className="border border-border rounded-lg p-4">
+                                <h3 className="font-medium mb-3 flex items-center gap-2">
+                                    <CreditCard className="w-4 h-4 text-primary" />
+                                    Информация о платеже
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Способ оплаты</div>
+                                        <div className="font-medium capitalize">{payment.method || 'Не указан'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">ID транзакции</div>
+                                        <div className="font-medium">{payment.transactionId || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Дата создания</div>
+                                        <div className="font-medium">{formatDate(payment.createdAt)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Дата оплаты</div>
+                                        <div className="font-medium">{payment.paidAt ? formatDate(payment.paidAt) : '—'}</div>
+                                    </div>
+                                    {payment.confirmedBy && (
+                                        <div className="col-span-2">
+                                            <div className="text-sm text-muted-foreground">Подтвердил</div>
+                                            <div className="font-medium">{payment.confirmedBy.name}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Информация о клиенте */}
+                            <div className="border border-border rounded-lg p-4">
+                                <h3 className="font-medium mb-3 flex items-center gap-2">
+                                    <User className="w-4 h-4 text-primary" />
+                                    Клиент
+                                </h3>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <User className="w-4 h-4 text-muted-foreground" />
+                                        <span className="font-medium">{payment.booking.user.name || 'Без имени'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Mail className="w-4 h-4 text-muted-foreground" />
+                                        <span>{payment.booking.user.email}</span>
+                                    </div>
+                                    {payment.booking.user.phone && (
+                                        <div className="flex items-center gap-2">
+                                            <Phone className="w-4 h-4 text-muted-foreground" />
+                                            <span>{payment.booking.user.phone}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Информация о бронировании */}
+                            <div className="border border-border rounded-lg p-4">
+                                <h3 className="font-medium mb-3 flex items-center gap-2">
+                                    <Package className="w-4 h-4 text-primary" />
+                                    Бронирование
+                                </h3>
+                                <div className="space-y-2">
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Оборудование</div>
+                                        <div className="font-medium">{payment.booking.equipment.name}</div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 mt-2">
+                                        <div>
+                                            <div className="text-sm text-muted-foreground">Дата начала</div>
+                                            <div className="font-medium">{formatDate(payment.booking.startDate)}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-sm text-muted-foreground">Дата окончания</div>
+                                            <div className="font-medium">{formatDate(payment.booking.endDate)}</div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 pt-2 border-t border-border">
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Стоимость заказа:</span>
+                                            <span className="font-medium">{formatPrice(payment.booking.totalPrice)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Подвал */}
+                <div className="border-t border-border px-6 py-4 flex justify-end gap-3">
+                    <Link href={`/admin/bookings/${payment?.bookingId}`}>
+                        <Button variant="outline">
+                            Перейти к заказу
+                        </Button>
+                    </Link>
+                    <Button variant="primary" onClick={onClose}>
+                        Закрыть
+                    </Button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// Модальное окно подтверждения оплаты
+const ConfirmPaymentModal = ({
+    isOpen,
+    onClose,
+    onConfirm,
+    payment,
+    isProcessing = false
+}: {
+    isOpen: boolean
+    onClose: () => void
+    onConfirm: () => void
+    payment: Payment | null
+    isProcessing?: boolean
+}) => {
+    if (!isOpen || !payment) return null
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-background rounded-lg p-6 max-w-md w-full mx-4">
+                <h3 className="text-lg font-semibold mb-2">Подтверждение оплаты</h3>
+                <p className="text-muted-foreground mb-4">
+                    Вы уверены, что хотите отметить платеж как оплаченный?
+                </p>
+
+                <div className="bg-muted/30 p-4 rounded-lg space-y-2 mb-4">
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Сумма:</span>
+                        <span className="font-bold text-primary">{formatPrice(payment.amount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Клиент:</span>
+                        <span>{payment.booking.user.name || 'Без имени'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Оборудование:</span>
+                        <span>{payment.booking.equipment.name}</span>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3">
+                    <Button variant="outline" onClick={onClose} disabled={isProcessing}>
+                        Отмена
+                    </Button>
+                    <Button
+                        onClick={onConfirm}
+                        disabled={isProcessing}
+                        className="gap-2"
+                    >
+                        {isProcessing && <RotateCcw className="w-4 h-4 animate-spin" />}
+                        {isProcessing ? 'Обработка...' : 'Подтвердить оплату'}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export default function PaymentsPage() {
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const { user } = useUser()
+
+    const [loading, setLoading] = useState(true)
+    const [updating, setUpdating] = useState<string | null>(null)
+    const [payments, setPayments] = useState<Payment[]>([])
+    const [stats, setStats] = useState<PaymentStats | null>(null)
+    const [filter, setFilter] = useState<string>(searchParams.get('status') || 'all')
+    const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>(searchParams.get('range') as any || 'month')
+    const [previewModal, setPreviewModal] = useState<{ isOpen: boolean; paymentId: string | null }>({
+        isOpen: false,
+        paymentId: null
+    })
+    const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; payment: Payment | null }>({
+        isOpen: false,
+        payment: null
+    })
+
+    // Пагинация
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [totalItems, setTotalItems] = useState(0)
+    const itemsPerPage = 25
+
+    useEffect(() => {
+        loadData()
+    }, [filter, timeRange, searchParams.get('page')])
+
+    const loadData = async () => {
+        setLoading(true)
+        try {
+            const page = parseInt(searchParams.get('page') || '1')
+
+            // Вычисляем даты для фильтрации
             const now = new Date()
-            const timeFilter = new Date()
+            const startDate = new Date()
             if (timeRange === 'week') {
-                timeFilter.setDate(now.getDate() - 7)
+                startDate.setDate(now.getDate() - 7)
             } else if (timeRange === 'month') {
-                timeFilter.setMonth(now.getMonth() - 1)
+                startDate.setMonth(now.getMonth() - 1)
             } else if (timeRange === 'year') {
-                timeFilter.setFullYear(now.getFullYear() - 1)
+                startDate.setFullYear(now.getFullYear() - 1)
             }
 
-            filteredPayments = filteredPayments.filter(p =>
-                new Date(p.createdAt) >= timeFilter
-            )
+            const [paymentsResult, statsResult] = await Promise.all([
+                getPayments({
+                    status: filter !== 'all' ? filter : undefined,
+                    startDate,
+                    endDate: now,
+                    page,
+                    limit: itemsPerPage
+                }),
+                getPaymentStats({ startDate, endDate: now })
+            ])
 
-            setPayments(filteredPayments)
+            if (paymentsResult.success && paymentsResult.data) {
+                setPayments(paymentsResult.data.items || [])
+                setCurrentPage(paymentsResult.data.page || 1)
+                setTotalPages(paymentsResult.data.totalPages || 1)
+                setTotalItems(paymentsResult.data.total || 0)
+            }
+
+            if (statsResult.success) {
+                setStats(statsResult.data as PaymentStats)
+            }
         } catch (error) {
             console.error('Error loading payments:', error)
         } finally {
@@ -154,66 +408,91 @@ export default function PaymentsPage() {
         }
     }
 
-    const handleExport = () => {
+    const handleFilterChange = (newFilter: string) => {
+        setFilter(newFilter)
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('status', newFilter)
+        params.delete('page')
+        router.push(`/admin/payments?${params.toString()}`)
+    }
+
+    const handleTimeRangeChange = (newRange: 'week' | 'month' | 'year') => {
+        setTimeRange(newRange)
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('range', newRange)
+        params.delete('page')
+        router.push(`/admin/payments?${params.toString()}`)
+    }
+
+    const goToPage = (page: number) => {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('page', page.toString())
+        router.push(`/admin/payments?${params.toString()}`)
+    }
+
+    const handleConfirmPayment = async () => {
+        if (!confirmModal.payment || !user?.id) return
+
+        setUpdating(confirmModal.payment.id)
+        try {
+            const result = await updatePaymentStatus(
+                confirmModal.payment.id,
+                'PAID',
+                user.id
+            )
+
+            if (result.success) {
+                await loadData()
+                setConfirmModal({ isOpen: false, payment: null })
+            } else {
+                alert(result.error || 'Ошибка при подтверждении платежа')
+            }
+        } catch (error) {
+            console.error('Error confirming payment:', error)
+            alert('Ошибка при подтверждении платежа')
+        } finally {
+            setUpdating(null)
+        }
+    }
+
+    const handleExport = async () => {
         alert('Экспорт платежей в разработке...')
     }
 
-    const handleMarkAsPaid = (paymentId: string) => {
-        if (confirm('Отметить платеж как оплаченный?')) {
-            alert(`Платеж ${paymentId} отмечен как оплаченный`)
-            loadPayments()
-        }
-    }
-
-    const getStatusConfig = (status: string) => {
-        switch (status) {
-            case 'PAID':
-                return {
-                    color: 'bg-green-500',
-                    icon: CheckCircle,
-                    text: 'Оплачен'
-                }
-            case 'PENDING':
-                return {
-                    color: 'bg-yellow-500',
-                    icon: Clock,
-                    text: 'Ожидает'
-                }
-            case 'FAILED':
-                return {
-                    color: 'bg-red-500',
-                    icon: XCircle,
-                    text: 'Ошибка'
-                }
+    const getMethodIcon = (method?: string) => {
+        switch (method?.toLowerCase()) {
+            case 'card':
+            case 'карта':
+                return { icon: CreditCard, color: 'text-blue-500' }
+            case 'cash':
+            case 'наличные':
+                return { icon: DollarSign, color: 'text-green-500' }
+            case 'transfer':
+            case 'перевод':
+                return { icon: TrendingUp, color: 'text-purple-500' }
             default:
-                return {
-                    color: 'bg-gray-500',
-                    icon: AlertCircle,
-                    text: status
-                }
+                return { icon: CreditCard, color: 'text-gray-500' }
         }
     }
 
-    const getMethodConfig = (method?: string) => {
-        switch (method) {
-            case 'Карта':
-                return { color: 'text-blue-500', icon: CreditCard }
-            case 'Наличные':
-                return { color: 'text-green-500', icon: DollarSign }
-            case 'Перевод':
-                return { color: 'text-purple-500', icon: TrendingUp }
-            default:
-                return { color: 'text-gray-500', icon: DollarSign }
-        }
-    }
-
-    const stats = {
-        total: payments.reduce((sum, p) => sum + p.amount, 0),
-        paid: payments.filter(p => p.status === 'PAID').reduce((sum, p) => sum + p.amount, 0),
-        pending: payments.filter(p => p.status === 'PENDING').reduce((sum, p) => sum + p.amount, 0),
-        failed: payments.filter(p => p.status === 'FAILED').reduce((sum, p) => sum + p.amount, 0),
-        count: payments.length,
-        paidCount: payments.filter(p => p.status === 'PAID').length
+    if (loading && !payments.length) {
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Платежи</h1>
+                        <div className="h-4 w-64 bg-muted rounded animate-pulse mt-1"></div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    {[...Array(5)].map((_, i) => (
+                        <div key={i} className="border border-border rounded-lg p-4">
+                            <div className="h-8 bg-muted rounded animate-pulse"></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -228,10 +507,11 @@ export default function PaymentsPage() {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={loadPayments}
+                        onClick={loadData}
                         className="flex items-center gap-2 px-4 py-2 border border-input rounded-lg hover:bg-accent transition-colors"
+                        disabled={loading}
                     >
-                        <RefreshCw className="w-4 h-4" />
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                         Обновить
                     </button>
                     <button
@@ -245,13 +525,13 @@ export default function PaymentsPage() {
             </div>
 
             {/* Статистика */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="border border-border rounded-lg p-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="text-sm text-muted-foreground">Общая сумма</div>
-                            <div className="text-2xl font-bold mt-1">{formatPrice(stats.total)}</div>
-                            <div className="text-xs text-muted-foreground mt-1">{stats.count} платежей</div>
+                            <div className="text-2xl font-bold mt-1">{formatPrice(stats?.total || 0)}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{stats?.count || 0} платежей</div>
                         </div>
                         <div className="p-3 bg-blue-500/10 rounded-lg">
                             <DollarSign className="w-5 h-5 text-blue-500" />
@@ -262,8 +542,8 @@ export default function PaymentsPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="text-sm text-muted-foreground">Оплачено</div>
-                            <div className="text-2xl font-bold mt-1">{formatPrice(stats.paid)}</div>
-                            <div className="text-xs text-muted-foreground mt-1">{stats.paidCount} платежей</div>
+                            <div className="text-2xl font-bold mt-1">{formatPrice(stats?.paid || 0)}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{stats?.paidCount || 0} платежей</div>
                         </div>
                         <div className="p-3 bg-green-500/10 rounded-lg">
                             <CheckCircle className="w-5 h-5 text-green-500" />
@@ -274,10 +554,8 @@ export default function PaymentsPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="text-sm text-muted-foreground">Ожидает оплаты</div>
-                            <div className="text-2xl font-bold mt-1">{formatPrice(stats.pending)}</div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                                {payments.filter(p => p.status === 'PENDING').length} платежей
-                            </div>
+                            <div className="text-2xl font-bold mt-1">{formatPrice(stats?.pending || 0)}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{stats?.pendingCount || 0} платежей</div>
                         </div>
                         <div className="p-3 bg-yellow-500/10 rounded-lg">
                             <Clock className="w-5 h-5 text-yellow-500" />
@@ -288,13 +566,22 @@ export default function PaymentsPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="text-sm text-muted-foreground">Неудачные</div>
-                            <div className="text-2xl font-bold mt-1">{formatPrice(stats.failed)}</div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                                {payments.filter(p => p.status === 'FAILED').length} платежей
-                            </div>
+                            <div className="text-2xl font-bold mt-1">{formatPrice(stats?.failed || 0)}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{stats?.failedCount || 0} платежей</div>
                         </div>
                         <div className="p-3 bg-red-500/10 rounded-lg">
                             <XCircle className="w-5 h-5 text-red-500" />
+                        </div>
+                    </div>
+                </div>
+                <div className="border border-border rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-sm text-muted-foreground">Возвраты</div>
+                            <div className="text-2xl font-bold mt-1">{formatPrice(stats?.refunded || 0)}</div>
+                        </div>
+                        <div className="p-3 bg-purple-500/10 rounded-lg">
+                            <RotateCcw className="w-5 h-5 text-purple-500" />
                         </div>
                     </div>
                 </div>
@@ -306,47 +593,56 @@ export default function PaymentsPage() {
                     <div className="md:col-span-2">
                         <div className="flex flex-wrap gap-2">
                             <button
-                                onClick={() => setFilter('all')}
+                                onClick={() => handleFilterChange('all')}
                                 className={`px-4 py-2 rounded-lg transition-colors ${filter === 'all'
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'border border-input hover:bg-accent'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'border border-input hover:bg-accent'
                                     }`}
                             >
                                 Все
                             </button>
                             <button
-                                onClick={() => setFilter('paid')}
-                                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'paid'
-                                        ? 'bg-green-500 text-white'
-                                        : 'border border-input hover:bg-accent'
+                                onClick={() => handleFilterChange('PAID')}
+                                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'PAID'
+                                    ? 'bg-green-500 text-white'
+                                    : 'border border-input hover:bg-accent'
                                     }`}
                             >
                                 Оплаченные
                             </button>
                             <button
-                                onClick={() => setFilter('pending')}
-                                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'pending'
-                                        ? 'bg-yellow-500 text-white'
-                                        : 'border border-input hover:bg-accent'
+                                onClick={() => handleFilterChange('PENDING')}
+                                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'PENDING'
+                                    ? 'bg-yellow-500 text-white'
+                                    : 'border border-input hover:bg-accent'
                                     }`}
                             >
                                 Ожидают
                             </button>
                             <button
-                                onClick={() => setFilter('failed')}
-                                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'failed'
-                                        ? 'bg-red-500 text-white'
-                                        : 'border border-input hover:bg-accent'
+                                onClick={() => handleFilterChange('FAILED')}
+                                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'FAILED'
+                                    ? 'bg-red-500 text-white'
+                                    : 'border border-input hover:bg-accent'
                                     }`}
                             >
                                 Ошибки
+                            </button>
+                            <button
+                                onClick={() => handleFilterChange('REFUNDED')}
+                                className={`px-4 py-2 rounded-lg transition-colors ${filter === 'REFUNDED'
+                                    ? 'bg-purple-500 text-white'
+                                    : 'border border-input hover:bg-accent'
+                                    }`}
+                            >
+                                Возвраты
                             </button>
                         </div>
                     </div>
                     <div>
                         <select
                             value={timeRange}
-                            onChange={(e) => setTimeRange(e.target.value as any)}
+                            onChange={(e) => handleTimeRangeChange(e.target.value as any)}
                             className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-background"
                         >
                             <option value="week">За неделю</option>
@@ -376,23 +672,24 @@ export default function PaymentsPage() {
                         <tbody className="divide-y divide-border">
                             {payments.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                                        Платежи не найдены
+                                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                                        <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                        <p className="text-lg font-medium">Платежи не найдены</p>
+                                        <p className="text-sm mt-1">Попробуйте изменить параметры фильтрации</p>
                                     </td>
                                 </tr>
                             ) : (
                                 payments.map((payment) => {
-                                    const statusConfig = getStatusConfig(payment.status)
-                                    const methodConfig = getMethodConfig(payment.method)
-                                    const StatusIcon = statusConfig.icon
-                                    const MethodIcon = methodConfig.icon
+                                    const methodIcon = getMethodIcon(payment.method)
+                                    const MethodIcon = methodIcon.icon
+                                    const isProcessing = updating === payment.id
 
                                     return (
                                         <tr key={payment.id} className="hover:bg-accent/50 transition-colors">
                                             <td className="py-3 px-4">
-                                                <div className="font-mono text-sm">{payment.id}</div>
+                                                <div className="font-mono text-sm">#{payment.id.slice(0, 8)}</div>
                                                 <div className="text-xs text-muted-foreground">
-                                                    Заказ: {payment.bookingId}
+                                                    Заказ: #{payment.bookingId.slice(0, 8)}
                                                 </div>
                                             </td>
                                             <td className="py-3 px-4">
@@ -425,44 +722,56 @@ export default function PaymentsPage() {
                                             </td>
                                             <td className="py-3 px-4">
                                                 <div className="font-bold">{formatPrice(payment.amount)}</div>
+                                                {payment.transactionId && (
+                                                    <div className="text-xs text-muted-foreground">
+                                                        ID: {payment.transactionId.slice(0, 10)}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="py-3 px-4">
                                                 <div className="flex items-center gap-2">
-                                                    <MethodIcon className={`w-4 h-4 ${methodConfig.color}`} />
-                                                    <span className="text-sm">{payment.method || 'Не указан'}</span>
+                                                    <MethodIcon className={`w-4 h-4 ${methodIcon.color}`} />
+                                                    <span className="text-sm capitalize">{payment.method || 'Не указан'}</span>
                                                 </div>
                                             </td>
                                             <td className="py-3 px-4">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`w-2 h-2 rounded-full ${statusConfig.color}`}></div>
-                                                    <span className="text-sm">{statusConfig.text}</span>
-                                                </div>
+                                                <StatusBadge status={payment.status} />
+                                                {payment.confirmedBy && payment.status === 'PAID' && (
+                                                    <div className="text-xs text-muted-foreground mt-1">
+                                                        Подтвердил: {payment.confirmedBy.name}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="py-3 px-4">
                                                 <div className="flex items-center gap-2 text-sm">
-                                                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                                                    {payment.paymentDate
-                                                        ? formatDate(payment.paymentDate)
-                                                        : formatDate(payment.createdAt)
-                                                    }
+                                                    <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                                                    {payment.paidAt ? formatDate(payment.paidAt) : formatDate(payment.createdAt)}
                                                 </div>
                                             </td>
                                             <td className="py-3 px-4">
                                                 <div className="flex items-center gap-2">
                                                     {payment.status === 'PENDING' && (
                                                         <button
-                                                            onClick={() => handleMarkAsPaid(payment.id)}
-                                                            className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 transition-colors"
+                                                            onClick={() => setConfirmModal({ isOpen: true, payment })}
+                                                            disabled={isProcessing}
+                                                            className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 transition-colors disabled:opacity-50"
                                                         >
-                                                            Подтвердить
+                                                            {isProcessing ? '...' : 'Подтвердить'}
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={() => setPreviewModal({ isOpen: true, paymentId: payment.id })}
+                                                        className="p-1.5 border border-input rounded hover:bg-accent transition-colors"
+                                                        title="Просмотр платежа"
+                                                    >
+                                                        <Eye className="w-4 h-4 text-muted-foreground" />
+                                                    </button>
                                                     <Link
                                                         href={`/admin/bookings/${payment.bookingId}`}
                                                         className="p-1.5 border border-input rounded hover:bg-accent transition-colors"
                                                         title="Просмотр заказа"
                                                     >
-                                                        <Eye className="w-4 h-4 text-muted-foreground" />
+                                                        <Package className="w-4 h-4 text-muted-foreground" />
                                                     </Link>
                                                 </div>
                                             </td>
@@ -473,7 +782,77 @@ export default function PaymentsPage() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Пагинация */}
+                {totalPages > 1 && (
+                    <div className="border-t border-border px-4 py-3">
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm text-muted-foreground">
+                                Показано {payments.length} из {totalItems} записей
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => goToPage(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className="p-2 border border-input rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                        let pageNum = currentPage
+                                        if (totalPages <= 5) {
+                                            pageNum = i + 1
+                                        } else if (currentPage <= 3) {
+                                            pageNum = i + 1
+                                        } else if (currentPage >= totalPages - 2) {
+                                            pageNum = totalPages - 4 + i
+                                        } else {
+                                            pageNum = currentPage - 2 + i
+                                        }
+
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => goToPage(pageNum)}
+                                                className={`w-8 h-8 border border-input rounded text-sm hover:bg-accent transition-colors ${currentPage === pageNum ? 'bg-accent font-medium' : ''
+                                                    }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+
+                                <button
+                                    onClick={() => goToPage(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 border border-input rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
+
+            {/* Модальное окно просмотра */}
+            <PaymentPreviewModal
+                paymentId={previewModal.paymentId}
+                isOpen={previewModal.isOpen}
+                onClose={() => setPreviewModal({ isOpen: false, paymentId: null })}
+            />
+
+            {/* Модальное окно подтверждения */}
+            <ConfirmPaymentModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ isOpen: false, payment: null })}
+                onConfirm={handleConfirmPayment}
+                payment={confirmModal.payment}
+                isProcessing={updating === confirmModal.payment?.id}
+            />
 
             {/* Быстрые действия */}
             <div className="border border-border rounded-lg bg-background p-6">

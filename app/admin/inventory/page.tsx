@@ -14,52 +14,15 @@ import {
     getInventoryHistory,
     updateEquipmentQuantity
 } from '@/server/actions/inventory.actions'
-
-// Типы
-interface InventorySummary {
-    summary: {
-        totalEquipment: number
-        totalItems: number
-        availableEquipment: number
-        lowStockEquipment: number
-        outOfStockEquipment: number
-    }
-    categories: Array<{
-        name: string
-        itemCount: number
-        bookingCount: number
-    }>
-    lowStockItems: Array<{
-        id: string
-        name: string
-        quantity: number
-        pricePerDay: number
-        category: { name: string }
-    }>
-    recentlyAdded: Array<{
-        id: string
-        name: string
-        quantity: number
-        createdAt: string
-        category: { name: string }
-    }>
-}
-
-interface HistoryItem {
-    id: string
-    type: string
-    equipmentName: string
-    userName: string
-    date: string
-    status: string
-    details: string
-}
+import { InventorySummary, InventoryHistoryItem } from '@/shared/types'
+import { useUser } from '@/hooks/useUser'
 
 export default function InventoryPage() {
+    const { user } = useUser()
     const [loading, setLoading] = useState(true)
     const [updating, setUpdating] = useState<string | null>(null)
     const [summary, setSummary] = useState<InventorySummary | null>(null)
-    const [history, setHistory] = useState<HistoryItem[]>([])
+    const [history, setHistory] = useState<InventoryHistoryItem[]>([])
     const [activeTab, setActiveTab] = useState<'summary' | 'lowstock' | 'history'>('summary')
 
     useEffect(() => {
@@ -79,7 +42,7 @@ export default function InventoryPage() {
             }
 
             if (historyResult.success) {
-                setHistory(historyResult.data as HistoryItem[])
+                setHistory(historyResult.data as InventoryHistoryItem[])
             }
         } catch (error) {
             console.error('Error loading inventory data:', error)
@@ -98,9 +61,14 @@ export default function InventoryPage() {
 
         setUpdating(equipmentId)
         try {
-            const result = await updateEquipmentQuantity(equipmentId, newQuantity)
+            const result = await updateEquipmentQuantity(
+                equipmentId,
+                newQuantity,
+                user?.id,
+                `Ручное изменение через инвентарь: ${change > 0 ? '+' : ''}${change}`
+            )
             if (result.success) {
-                await loadData() // Перезагружаем данные
+                await loadData()
             } else {
                 alert(result.error || 'Ошибка обновления')
             }
@@ -481,19 +449,24 @@ export default function InventoryPage() {
                                         <div>
                                             <h3 className="font-medium">{item.equipmentName}</h3>
                                             <p className="text-sm text-muted-foreground">
-                                                {item.userName} • {formatDate(item.date)}
+                                                {item.userName} • {formatDate(item.createdAt)}
                                             </p>
                                             <p className="text-sm mt-1">{item.details}</p>
                                         </div>
-                                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${item.status === 'COMPLETED' ? 'bg-green-500/10 text-green-500' :
-                                                item.status === 'CANCELLED' ? 'bg-red-500/10 text-red-500' :
-                                                    item.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' :
+                                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${item.action === 'COMPLETED' ? 'bg-green-500/10 text-green-500' :
+                                                item.action === 'CANCELLED' ? 'bg-red-500/10 text-red-500' :
+                                                    item.action === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' :
                                                         'bg-blue-500/10 text-blue-500'
                                             }`}>
-                                            {item.status === 'PENDING' ? 'ожидает' :
-                                                item.status === 'CONFIRMED' ? 'подтвержден' :
-                                                    item.status === 'COMPLETED' ? 'завершен' :
-                                                        item.status === 'CANCELLED' ? 'отменен' : item.status}
+                                            {item.action === 'PENDING' ? 'ожидает' :
+                                                item.action === 'CONFIRMED' ? 'подтвержден' :
+                                                    item.action === 'COMPLETED' ? 'завершен' :
+                                                        item.action === 'CANCELLED' ? 'отменен' :
+                                                            item.action === 'CREATE' ? 'создание' :
+                                                                item.action === 'UPDATE' ? 'обновление' :
+                                                                    item.action === 'DELETE' ? 'удаление' :
+                                                                        item.action === 'BOOKING' ? 'бронирование' :
+                                                                            item.action === 'RETURN' ? 'возврат' : item.action}
                                         </div>
                                     </div>
                                 </div>

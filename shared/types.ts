@@ -1,5 +1,5 @@
 // shared/types.ts
-
+import { Prisma } from '@prisma/client'
 // ==================== БАЗОВЫЕ ТИПЫ ====================
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'STAFF' | 'CUSTOMER'
@@ -8,6 +8,49 @@ export type PaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'FAILED' | 'REFU
 export type NotificationType = 'BOOKING_UPDATE' | 'PAYMENT' | 'SYSTEM' | 'PROMOTION' | 'REMINDER' | 'MAINTENANCE'
 
 // ==================== МОДЕЛЬНЫЕ ТИПЫ ====================
+
+export type EquipmentWithDetails = Prisma.EquipmentGetPayload<{
+    include: {
+        category: true
+        reviews: {
+            include: {
+                user: {
+                    select: {
+                        name: true
+                        avatar: true
+                    }
+                }
+            }
+        }
+    }
+}>
+
+// Тип для списка оборудования с пагинацией (то что возвращает getEquipment)
+export type EquipmentListItem = Prisma.EquipmentGetPayload<{
+    include: {
+        category: true
+        reviews: {
+            include: {
+                user: {
+                    select: {
+                        name: true
+                        avatar: true
+                    }
+                }
+            }
+        }
+    }
+}>
+
+// Для ответа с пагинацией
+export interface PaginatedEquipmentResponse {
+    items: EquipmentListItem[]
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+}
+
 
 export interface User {
     id: string
@@ -230,6 +273,8 @@ export interface EquipmentFilters {
     available?: boolean
     featured?: boolean
     search?: string
+    page?: number        // новый
+    limit?: number       // новый
 }
 
 // Для таблиц админки
@@ -255,4 +300,60 @@ export interface CategoryWithStats extends Category {
         equipment: number
         children: number
     }
+}
+
+export interface InventorySummary {
+    summary: {
+        totalEquipment: number
+        totalItems: number
+        availableEquipment: number
+        lowStockEquipment: number
+        outOfStockEquipment: number
+    }
+    categories: Array<{
+        name: string
+        itemCount: number
+        bookingCount: number
+    }>
+    lowStockItems: Array<{
+        id: string
+        name: string
+        quantity: number
+        pricePerDay: number
+        category: {
+            name: string
+        }
+    }>
+    recentlyAdded: Array<{
+        id: string
+        name: string
+        quantity: number
+        createdAt: Date
+        category: {
+            name: string
+        }
+    }>
+}
+
+export interface InventoryHistoryItem {
+    id: string
+    action: string
+    equipmentName: string
+    equipmentId: string
+    userName: string | null
+    userId: string | null
+    quantity?: number
+    details: string
+    createdAt: Date
+}
+
+export interface InventoryLogData {
+    equipmentId: string
+    userId?: string
+    action: string
+    field?: string
+    oldValue?: string
+    newValue?: string
+    quantity?: number
+    reason?: string
 }

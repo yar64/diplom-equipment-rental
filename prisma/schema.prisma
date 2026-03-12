@@ -26,6 +26,9 @@ model User {
   reviews       Review[]
   staff         Staff?
   notifications Notification[]
+  inventoryLogs InventoryLog[]
+
+  confirmedPayments Payment[]   @relation("confirmedPayments")  // Платежи, которые подтвердил пользователь
   
   @@map("users")
 }
@@ -66,6 +69,7 @@ model Equipment {
   bookings        Booking[]
   favorites       Favorite[]
   reviews         Review[]
+  inventoryLogs   InventoryLog[]
   
   @@map("equipment")
 }
@@ -115,10 +119,8 @@ model Booking {
   equipmentId     String
   equipment       Equipment     @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   
-  // Оплата
-  paymentId       String?       @unique
-  paymentStatus   PaymentStatus @default(PENDING)
-  paymentMethod   String?
+  // Связь с платежом
+  payment         Payment?
   
   @@map("bookings")
 }
@@ -197,6 +199,43 @@ model Cart {
   updatedAt   DateTime  @updatedAt
   
   @@map("carts")
+}
+
+model InventoryLog {
+    id          String     @id @default(cuid())
+    equipmentId String
+    equipment   Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+    userId      String?
+    user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+    action      String     // 'CREATE' | 'UPDATE' | 'DELETE' | 'BOOKING' | 'RETURN'
+    field       String?    // поле которое изменили
+    oldValue    String?    // старое значение
+    newValue    String?    // новое значение
+    quantity    Int?       // количество
+    reason      String?    // причина изменения
+    createdAt   DateTime   @default(now())
+
+    @@map("inventory_logs")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  bookingId     String        @unique
+  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  amount        Float
+  status        PaymentStatus @default(PENDING)
+  method        String?
+  transactionId String?
+  
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  confirmedById String?
+  confirmedBy   User?         @relation("confirmedPayments", fields: [confirmedById], references: [id])
+  
+  @@map("payments")
 }
 
 // ==================== ENUMS ====================

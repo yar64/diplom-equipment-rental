@@ -14,6 +14,7 @@ import { getCategories } from '@/server/actions/category.actions'
 import { Equipment } from '@/shared/types'
 import { formatDate } from '@/shared/utils'
 import Button from '../../components/ui/Button'
+import EquipmentPreviewModal from '../../components/admin/EquipmentPreviewModal'
 
 interface EquipmentItem {
     id: string
@@ -63,6 +64,14 @@ export default function EquipmentPage() {
         id: '',
         name: ''
     })
+    const [previewModal, setPreviewModal] = useState<{ isOpen: boolean; equipmentId: string | null }>({
+        isOpen: false,
+        equipmentId: null
+    })
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [totalItems, setTotalItems] = useState(0)
+    const itemsPerPage = 25
 
     // Фильтры из URL
     const [filters, setFilters] = useState({
@@ -96,13 +105,15 @@ export default function EquipmentPage() {
     const loadEquipment = async () => {
         setLoading(true)
         try {
-            // Берем фильтры напрямую из URL
             const urlFilters = {
                 search: searchParams.get('search') || '',
                 categoryId: searchParams.get('categoryId') || '',
                 available: searchParams.get('available') || '',
                 featured: searchParams.get('featured') || '',
             }
+
+            // Получаем страницу из URL или ставим 1
+            const page = parseInt(searchParams.get('page') || '1')
 
             console.log('🔍 Фильтры из URL:', urlFilters)
 
@@ -111,12 +122,17 @@ export default function EquipmentPage() {
                 categoryId: urlFilters.categoryId || undefined,
                 available: urlFilters.available || undefined,
                 featured: urlFilters.featured || undefined,
+                page: page,
+                limit: itemsPerPage
             })
 
             console.log('📦 Результат:', equipmentRes)
 
-            if (equipmentRes.success) {
-                setEquipment(equipmentRes.data || [])
+            if (equipmentRes.success && equipmentRes.data) {
+                setEquipment(equipmentRes.data.items || [])
+                setCurrentPage(equipmentRes.data.page)
+                setTotalPages(equipmentRes.data.totalPages)
+                setTotalItems(equipmentRes.data.total)
             }
         } catch (error) {
             console.error('Error loading equipment:', error)
@@ -129,13 +145,14 @@ export default function EquipmentPage() {
     const handleFilterChange = (key: string, value: string) => {
         setFilters(prev => ({ ...prev, [key]: value }))
 
-        // Обновляем URL
         const params = new URLSearchParams(searchParams.toString())
         if (value) {
             params.set(key, value)
         } else {
             params.delete(key)
         }
+        // При изменении фильтров сбрасываем на первую страницу
+        params.delete('page')
         router.push(`/admin/equipment?${params.toString()}`)
     }
 
@@ -157,6 +174,11 @@ export default function EquipmentPage() {
             console.error('Delete error:', error)
             alert('Ошибка при удалении')
         }
+    }
+    const goToPage = (page: number) => {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('page', page.toString())
+        router.push(`/admin/equipment?${params.toString()}`)
     }
 
     // Статистика
@@ -455,11 +477,13 @@ export default function EquipmentPage() {
                                                         <Edit className="w-4 h-4" />
                                                     </button>
                                                 </Link>
-                                                <Link href={`/catalog/${item.slug}`} target="_blank">
-                                                    <button className="p-1.5 hover:bg-accent rounded-md transition-colors" title="Просмотр на сайте">
-                                                        <Eye className="w-4 h-4" />
-                                                    </button>
-                                                </Link>
+                                                <button
+                                                    onClick={() => setPreviewModal({ isOpen: true, equipmentId: item.id })}
+                                                    className="p-1.5 hover:bg-accent rounded-md transition-colors"
+                                                    title="Быстрый просмотр"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </button>
                                                 <button
                                                     onClick={() => setDeleteDialog({
                                                         open: true,
@@ -480,23 +504,59 @@ export default function EquipmentPage() {
                     </table>
                 </div>
 
-                {/* Пагинация (заглушка) */}
+                {/* Пагинация */}
                 <div className="border-t border-border px-4 py-3">
                     <div className="flex items-center justify-between">
                         <div className="text-sm text-muted-foreground">
-                            Показано {equipment.length} записей
+                            Показано {equipment.length} из {totalItems} записей
                         </div>
-                        <div className="flex items-center gap-2">
-                            <button className="px-3 py-1 border border-input rounded text-sm hover:bg-accent transition-colors">
-                                Назад
-                            </button>
-                            <button className="px-3 py-1 border border-input rounded text-sm bg-accent font-medium">
-                                1
-                            </button>
-                            <button className="px-3 py-1 border border-input rounded text-sm hover:bg-accent transition-colors">
-                                Далее
-                            </button>
-                        </div>
+                        {totalPages > 1 && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => goToPage(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className="px-3 py-1 border border-input rounded text-sm hover:bg-accent transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                >
+                                    Назад
+                                </button>
+
+                                {/* Номера страниц */}
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                        // Показываем страницы вокруг текущей
+                                        let pageNum = currentPage
+                                        if (totalPages <= 5) {
+                                            pageNum = i + 1
+                                        } else if (currentPage <= 3) {
+                                            pageNum = i + 1
+                                        } else if (currentPage >= totalPages - 2) {
+                                            pageNum = totalPages - 4 + i
+                                        } else {
+                                            pageNum = currentPage - 2 + i
+                                        }
+
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => goToPage(pageNum)}
+                                                className={`w-8 h-8 border border-input rounded text-sm hover:bg-accent transition-colors ${currentPage === pageNum ? 'bg-accent font-medium' : ''
+                                                    }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+
+                                <button
+                                    onClick={() => goToPage(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className="px-3 py-1 border border-input rounded text-sm hover:bg-accent transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                >
+                                    Далее
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -527,6 +587,13 @@ export default function EquipmentPage() {
                     </div>
                 </div>
             )}
+
+            {/* Модальное окно предпросмотра */}
+            <EquipmentPreviewModal
+                equipmentId={previewModal.equipmentId}
+                isOpen={previewModal.isOpen}
+                onClose={() => setPreviewModal({ isOpen: false, equipmentId: null })}
+            />
         </div>
     )
 }

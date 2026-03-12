@@ -4,6 +4,7 @@
 import prisma from '../utils/prisma'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { EquipmentListItem, PaginatedEquipmentResponse } from '@/shared/types'
 
 // ==================== ВАЛИДАЦИЯ ====================
 
@@ -87,12 +88,17 @@ interface UpdateEquipmentData {
 
 // Получение оборудования с фильтрами
 export async function getEquipment(
-    filters?: EquipmentFilters
-): Promise<ActionResponse> {
+    filters?: EquipmentFilters & { page?: number; limit?: number }
+): Promise<ActionResponse<PaginatedEquipmentResponse>> {
     try {
         const where: any = {
             //available: true,
         }
+
+        // Пагинация
+        const page = filters?.page || 1
+        const limit = filters?.limit || 25
+        const skip = (page - 1) * limit
 
         if (filters?.categoryId) {
             where.categoryId = filters.categoryId
@@ -106,7 +112,7 @@ export async function getEquipment(
             ]
         }
 
-        // ✅ ИСПРАВЛЕНО: Фильтр по статусу доступности
+        // Фильтр по статусу доступности
         if (filters?.available !== undefined && filters.available !== '') {
             if (typeof filters.available === 'string') {
                 where.available = filters.available === 'true'
@@ -115,7 +121,7 @@ export async function getEquipment(
             }
         }
 
-        // ✅ ИСПРАВЛЕНО: Фильтр по рекомендуемым
+        // Фильтр по рекомендуемым
         if (filters?.featured !== undefined && filters.featured !== '') {
             if (typeof filters.featured === 'string') {
                 where.featured = filters.featured === 'true'
@@ -134,6 +140,10 @@ export async function getEquipment(
 
         console.log('🔍 Применяемые фильтры:', where)
 
+        // Получаем общее количество записей (для пагинации)
+        const total = await prisma.equipment.count({ where })
+
+        // Получаем записи для текущей страницы
         const equipment = await prisma.equipment.findMany({
             where,
             include: {
@@ -152,12 +162,21 @@ export async function getEquipment(
             orderBy: {
                 createdAt: 'desc',
             },
-            take: filters?.limit || 100,
+            skip,
+            take: limit,
         })
+
+        const totalPages = Math.ceil(total / limit)
 
         return {
             success: true,
-            data: equipment
+            data: {
+                items: equipment,
+                total,
+                page,
+                limit,
+                totalPages
+            }
         }
     } catch (error: unknown) {
         console.error('Get equipment error:', error)
@@ -320,28 +339,85 @@ export async function updateEquipment(
     formData: FormData
 ): Promise<ActionResponse> {
     try {
-        const rawData = {
-            name: formData.get('name'),
-            description: formData.get('description'),
-            pricePerDay: formData.get('pricePerDay'),
-            categoryId: formData.get('categoryId'),
-            quantity: formData.get('quantity'),
+        // Функция для безопасного получения значения из FormData
+        const getValue = (key: string): string | undefined => {
+            const value = formData.get(key)
+            return value ? String(value) : undefined
         }
 
-        const validatedData = equipmentSchema.partial().parse({
+        const rawData = {
+            name: getValue('name'),
+            description: getValue('description'),
+            fullDescription: getValue('fullDescription'),
+            pricePerDay: getValue('pricePerDay'),
+            pricePerWeek: getValue('pricePerWeek'),
+            pricePerMonth: getValue('pricePerMonth'),
+            categoryId: getValue('categoryId'),
+            quantity: getValue('quantity'),
+            brand: getValue('brand'),
+            model: getValue('model'),
+            weight: getValue('weight'),
+            dimensions: getValue('dimensions'),
+            powerRequirements: getValue('powerRequirements'),
+            available: formData.get('available') === 'true',
+            featured: formData.get('featured') === 'true',
+            mainImage: getValue('mainImage'),
+            serialNumber: getValue('sku'),
+            images: getValue('images') || '[]',
+        }
+
+        // Валидация
+        const equipmentUpdateSchema = z.object({
+            name: z.string().min(2, 'Название слишком короткое').optional(),
+            description: z.string().min(5, 'Описание слишком короткое').optional(),
+            fullDescription: z.string().optional(),
+            pricePerDay: z.number().positive('Цена должна быть положительной').optional(),
+            pricePerWeek: z.number().positive().optional(),
+            pricePerMonth: z.number().positive().optional(),
+            categoryId: z.string().min(1, 'Выберите категорию').optional(),
+            quantity: z.number().int().min(1, 'Количество должно быть не менее 1').optional(),
+            brand: z.string().optional(),
+            model: z.string().optional(),
+            weight: z.number().optional(),
+            dimensions: z.string().optional(),
+            powerRequirements: z.string().optional(),
+            available: z.boolean().optional(),
+            featured: z.boolean().optional(),
+            mainImage: z.string().optional(),
+            serialNumber: z.string().optional(),
+            images: z.string().optional(),
+        })
+
+        const validatedData = equipmentUpdateSchema.parse({
             ...rawData,
             pricePerDay: rawData.pricePerDay ? Number(rawData.pricePerDay) : undefined,
+            pricePerWeek: rawData.pricePerWeek ? Number(rawData.pricePerWeek) : undefined,
+            pricePerMonth: rawData.pricePerMonth ? Number(rawData.pricePerMonth) : undefined,
             quantity: rawData.quantity ? Number(rawData.quantity) : undefined,
+            weight: rawData.weight ? Number(rawData.weight) : undefined,
         })
+
+        // Если название изменилось, обновляем slug
+        const updateData: any = { ...validatedData }
+
+        if (validatedData.name) {
+            updateData.slug = validatedData.name
+                .toLowerCase()
+                .replace(/[^\w\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '')
+        }
 
         const equipment = await prisma.equipment.update({
             where: { id },
-            data: validatedData,
+            data: updateData,
         })
 
         revalidatePath('/catalog')
-        revalidatePath(`/equipment/${equipment.slug}`)
+        revalidatePath(`/catalog/${equipment.slug}`)
         revalidatePath('/admin/equipment')
+        revalidatePath(`/admin/equipment/${id}/edit`)
 
         return {
             success: true,
@@ -349,13 +425,13 @@ export async function updateEquipment(
             message: 'Оборудование успешно обновлено'
         }
     } catch (error) {
-        console.error('Update equipment error:', error)
+        console.error('❌ Update equipment error:', error)
 
         if (error instanceof z.ZodError) {
-            const zodError = error as any
+            console.log('📋 Zod ошибки:', error.issues)
             return {
                 success: false,
-                error: zodError.errors?.[0]?.message || 'Ошибка валидации'
+                error: error.issues[0]?.message || 'Ошибка валидации'
             }
         }
 

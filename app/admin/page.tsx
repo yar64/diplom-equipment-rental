@@ -81,14 +81,56 @@ export default function AdminDashboard() {
                 getEquipment(),
                 getCategories(),
                 getUsers(),
-                getAllBookings ? getAllBookings() : Promise.resolve({ success: true, data: [] })
+                getAllBookings ? getAllBookings({ limit: 100 }) : Promise.resolve({ success: true, data: { items: [] } })
             ])
 
+            // Обработка оборудования
+            let equipmentData: EquipmentItem[] = []
+            if (equipmentResult.success) {
+                if (equipmentResult.data && 'items' in equipmentResult.data) {
+                    equipmentData = (equipmentResult.data as any).items || []
+                } else if (Array.isArray(equipmentResult.data)) {
+                    equipmentData = equipmentResult.data as EquipmentItem[]
+                } else if (equipmentResult.data) {
+                    equipmentData = [equipmentResult.data as EquipmentItem]
+                }
+            }
+
+            // Обработка категорий
+            let categoriesData: CategoryItem[] = []
+            if (categoriesResult.success) {
+                if (Array.isArray(categoriesResult.data)) {
+                    categoriesData = categoriesResult.data as CategoryItem[]
+                } else if (categoriesResult.data && 'items' in categoriesResult.data) {
+                    categoriesData = (categoriesResult.data as any).items || []
+                }
+            }
+
+            // Обработка пользователей
+            let usersData: UserItem[] = []
+            if (usersResult.success) {
+                if (Array.isArray(usersResult.data)) {
+                    usersData = usersResult.data as UserItem[]
+                } else if (usersResult.data && 'items' in usersResult.data) {
+                    usersData = (usersResult.data as any).items || []
+                }
+            }
+
+            // Обработка бронирований
+            let bookingsData: BookingItem[] = []
+            if (bookingsResult.success && bookingsResult.data) {
+                if ('items' in bookingsResult.data) {
+                    bookingsData = (bookingsResult.data as any).items || []
+                } else if (Array.isArray(bookingsResult.data)) {
+                    bookingsData = bookingsResult.data as BookingItem[]
+                }
+            }
+
             setStats({
-                equipment: equipmentResult.success ? (equipmentResult.data as EquipmentItem[]) || [] : [],
-                categories: categoriesResult.success ? (categoriesResult.data as CategoryItem[]) || [] : [],
-                users: usersResult.success ? (usersResult.data as UserItem[]) || [] : [],
-                bookings: bookingsResult.success ? (bookingsResult.data as BookingItem[]) || [] : [],
+                equipment: equipmentData,
+                categories: categoriesData,
+                users: usersData,
+                bookings: bookingsData,
             })
         } catch (error) {
             console.error('Error loading data:', error)

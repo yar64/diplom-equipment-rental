@@ -3,25 +3,47 @@
 
 import prisma from '../utils/prisma'
 import { revalidatePath } from 'next/cache'
+import { InventorySummary, InventoryHistoryItem, ActionResponse } from '@/shared/types'
 
-// Тип для ответа
-interface ActionResponse<T = any> {
-    success: boolean
-    data?: T
-    error?: string
-    message?: string
+// Функция для логирования изменений (принимает userId из клиента)
+async function logInventoryChange(data: {
+    equipmentId: string
+    userId?: string | null
+    action: string
+    field?: string
+    oldValue?: any
+    newValue?: any
+    quantity?: number
+    reason?: string
+}) {
+    try {
+        await prisma.inventoryLog.create({
+            data: {
+                equipmentId: data.equipmentId,
+                userId: data.userId || null,
+                action: data.action,
+                field: data.field,
+                oldValue: data.oldValue?.toString(),
+                newValue: data.newValue?.toString(),
+                quantity: data.quantity,
+                reason: data.reason,
+            }
+        })
+    } catch (error) {
+        console.error('Error logging inventory change:', error)
+    }
 }
 
-// Получение сводки по инвентарю
-export async function getInventorySummary(): Promise<ActionResponse> {
+export async function getInventorySummary(): Promise<ActionResponse<InventorySummary>> {
     try {
         // Общая статистика
         const totalEquipment = await prisma.equipment.count()
-        const totalItems = await prisma.equipment.aggregate({
+        const totalItemsAgg = await prisma.equipment.aggregate({
             _sum: {
                 quantity: true
             }
         })
+        const totalItems = totalItemsAgg._sum.quantity || 0
 
         // Оборудование по статусам
         const availableEquipment = await prisma.equipment.count({
@@ -39,7 +61,7 @@ export async function getInventorySummary(): Promise<ActionResponse> {
             where: { quantity: 0 }
         })
 
-        // Самые популярные категории
+        // Категории со статистикой
         const categories = await prisma.category.findMany({
             include: {
                 equipment: {
@@ -89,7 +111,7 @@ export async function getInventorySummary(): Promise<ActionResponse> {
             data: {
                 summary: {
                     totalEquipment,
-                    totalItems: totalItems._sum.quantity || 0,
+                    totalItems,
                     availableEquipment,
                     lowStockEquipment,
                     outOfStockEquipment
@@ -99,8 +121,20 @@ export async function getInventorySummary(): Promise<ActionResponse> {
                     itemCount: cat.equipment.reduce((sum, eq) => sum + eq.quantity, 0),
                     bookingCount: cat.equipment.reduce((sum, eq) => sum + eq.bookings.length, 0)
                 })),
-                lowStockItems,
-                recentlyAdded
+                lowStockItems: lowStockItems.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    quantity: item.quantity,
+                    pricePerDay: item.pricePerDay,
+                    category: item.category
+                })),
+                recentlyAdded: recentlyAdded.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    quantity: item.quantity,
+                    createdAt: item.createdAt,
+                    category: item.category
+                }))
             }
         }
     } catch (error: any) {
@@ -112,16 +146,29 @@ export async function getInventorySummary(): Promise<ActionResponse> {
     }
 }
 
-// Обновление количества оборудования
+// Обновление количества оборудования (теперь принимает userId)
 export async function updateEquipmentQuantity(
     equipmentId: string,
-    quantity: number
+    quantity: number,
+    userId?: string | null,
+    reason?: string
 ): Promise<ActionResponse> {
     try {
         if (quantity < 0) {
             return { success: false, error: 'Количество не может быть отрицательным' }
         }
 
+        // Получаем текущее состояние
+        const currentEquipment = await prisma.equipment.findUnique({
+            where: { id: equipmentId },
+            select: { quantity: true, name: true }
+        })
+
+        if (!currentEquipment) {
+            return { success: false, error: 'Оборудование не найдено' }
+        }
+
+        // Обновляем количество
         const equipment = await prisma.equipment.update({
             where: { id: equipmentId },
             data: {
@@ -130,8 +177,21 @@ export async function updateEquipmentQuantity(
             }
         })
 
+        // Логируем изменение
+        await logInventoryChange({
+            equipmentId,
+            userId,
+            action: 'UPDATE',
+            field: 'quantity',
+            oldValue: currentEquipment.quantity,
+            newValue: quantity,
+            quantity: quantity,
+            reason: reason || `Изменение количества с ${currentEquipment.quantity} на ${quantity}`
+        })
+
         revalidatePath('/admin/inventory')
         revalidatePath('/admin/equipment')
+        revalidatePath(`/admin/equipment/${equipmentId}/edit`)
 
         return {
             success: true,
@@ -147,13 +207,10 @@ export async function updateEquipmentQuantity(
     }
 }
 
-// Получение истории изменений инвентаря
-export async function getInventoryHistory(): Promise<ActionResponse> {
+export async function getInventoryHistory(limit: number = 50): Promise<ActionResponse<InventoryHistoryItem[]>> {
     try {
-        // В реальном приложении здесь была бы отдельная таблица истории
-        // Пока возвращаем последние бронирования как пример активности
-        const recentActivity = await prisma.booking.findMany({
-            take: 10,
+        const logs = await prisma.inventoryLog.findMany({
+            take: limit,
             orderBy: { createdAt: 'desc' },
             include: {
                 equipment: {
@@ -165,23 +222,77 @@ export async function getInventoryHistory(): Promise<ActionResponse> {
             }
         })
 
+        const historyItems: InventoryHistoryItem[] = logs.map(log => ({
+            id: log.id,
+            action: log.action,
+            equipmentName: log.equipment.name,
+            equipmentId: log.equipmentId,
+            userName: log.user?.name || 'Система',
+            userId: log.userId,
+            quantity: log.quantity || undefined,
+            details: log.reason ||
+                `${log.action === 'CREATE' ? 'Создание' :
+                    log.action === 'UPDATE' ? `Изменение ${log.field}: ${log.oldValue} → ${log.newValue}` :
+                        log.action === 'DELETE' ? 'Удаление' :
+                            log.action === 'BOOKING' ? 'Бронирование' :
+                                log.action === 'RETURN' ? 'Возврат' : log.action}`,
+            createdAt: log.createdAt
+        }))
+
         return {
             success: true,
-            data: recentActivity.map(activity => ({
-                id: activity.id,
-                type: 'BOOKING',
-                equipmentName: activity.equipment.name,
-                userName: activity.user.name || 'Неизвестно',
-                date: activity.createdAt,
-                status: activity.status,
-                details: `Бронирование ${activity.status}`
-            }))
+            data: historyItems
         }
     } catch (error: any) {
         console.error('Get inventory history error:', error)
         return {
             success: false,
             error: error instanceof Error ? error.message : 'Не удалось загрузить историю'
+        }
+    }
+}
+
+// Массовое обновление
+export async function bulkUpdateQuantity(
+    updates: { equipmentId: string; quantity: number; reason?: string }[],
+    userId?: string | null
+): Promise<ActionResponse> {
+    try {
+        const results = []
+        const errors = []
+
+        for (const update of updates) {
+            try {
+                const result = await updateEquipmentQuantity(
+                    update.equipmentId,
+                    update.quantity,
+                    userId,
+                    update.reason
+                )
+                if (result.success) {
+                    results.push(result.data)
+                } else {
+                    errors.push({ equipmentId: update.equipmentId, error: result.error })
+                }
+            } catch (error) {
+                errors.push({ equipmentId: update.equipmentId, error: 'Ошибка обновления' })
+            }
+        }
+
+        if (errors.length === 0) {
+            return { success: true, message: `Обновлено ${results.length} позиций` }
+        } else {
+            return {
+                success: false,
+                error: `Обновлено ${results.length}, ошибок: ${errors.length}`,
+                data: { results, errors }
+            }
+        }
+    } catch (error: any) {
+        console.error('Bulk update error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Ошибка массового обновления'
         }
     }
 }
